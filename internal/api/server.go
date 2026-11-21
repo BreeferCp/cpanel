@@ -55,17 +55,18 @@ func New(cfg config.Config, db *store.Store, prov *provision.Provisioner, mdb *s
 	return s
 }
 
-// Handler returns the fully wrapped root handler.
-func (s *Server) Handler() http.Handler {
+// Handler returns the fully wrapped root handler for one panel.
+func (s *Server) Handler(panel Panel) http.Handler {
 	mux := http.NewServeMux()
 	s.routes(mux)
 	mux.Handle("/", s.spa())
 	var h http.Handler = mux
+	h = s.featureGate(h)
 	h = s.authenticate(h)
 	h = s.limitAPI(h)
 	h = securityHeaders(h)
 	h = s.recoverer(h)
-	return h
+	return withPanel(panel, h)
 }
 
 func (s *Server) limitAPI(next http.Handler) http.Handler {
@@ -89,6 +90,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/health", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, map[string]string{"status": "ok", "version": s.version})
 	})
+	mux.HandleFunc("GET /api/v1/panel", s.wrap(s.panelInfo))
 	mux.HandleFunc("POST /api/v1/auth/login", s.wrap(s.login))
 	mux.HandleFunc("POST /api/v1/auth/login/2fa", s.wrap(s.login2FA))
 	mux.HandleFunc("POST /api/v1/auth/sso", s.wrap(s.ssoRedeem))
@@ -151,6 +153,12 @@ func (s *Server) routes(mux *http.ServeMux) {
 	s.toolRoutes(mux)
 	s.terminalRoutes(mux)
 	s.metricsRoutes(mux)
+	s.featureRoutes(mux)
+	s.mailFilterRoutes(mux)
+	s.moreHostingRoutes(mux)
+	s.whmToolRoutes(mux)
+	s.wpToolkitRoutes(mux)
+	s.updateRoutes(mux)
 }
 
 // spa serves the built React app, falling back to index.html for client routes.

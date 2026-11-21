@@ -117,7 +117,11 @@ func (s *Server) createInstallation(w http.ResponseWriter, r *http.Request) erro
 	if sub != "" {
 		dir = path.Join(d.DocRoot, sub)
 	}
-	url := "https://" + d.Name + "/" + sub
+	// https only once the domain has a certificate; WordPress stores the
+	// URL and would otherwise redirect to a site that does not answer.
+	var certs int
+	_ = s.db.QueryRow(r.Context(), `SELECT COUNT(*) FROM ssl_certs WHERE domain_id = ?`, d.ID).Scan(&certs)
+	url := siteScheme(certs > 0) + d.Name + "/" + sub
 	url = strings.TrimSuffix(url, "/")
 	if app.Method == "wpcli" {
 		if req.Title == "" {

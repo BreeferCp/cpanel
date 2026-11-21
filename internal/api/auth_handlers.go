@@ -102,7 +102,13 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 	req.Username = strings.ToLower(strings.TrimSpace(req.Username))
 	// Only failures count, so many legitimate sign-ins from one office IP
 	// never trip the limiter.
-	if s.loginLimit.blocked("ip:"+ip) || s.loginLimit.blocked("user:"+req.Username) {
+	rule := s.loginRuleFor(r.Context(), ip)
+	if rule == "deny" {
+		s.auditAs(r.Context(), "", req.Username, ip, "auth.login", "", false, "address denied by host access rule")
+		return &apiError{403, "access_denied", "sign-in from your address is not allowed"}
+	}
+	// Allow-listed addresses (office, monitoring) are never rate limited.
+	if rule != "allow" && (s.loginLimit.blocked("ip:"+ip) || s.loginLimit.blocked("user:"+req.Username)) {
 		return errTooMany()
 	}
 	failedAttempt := func() {
@@ -135,6 +141,15 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 	}
 	if u.Suspended {
 		return &apiError{403, "suspended", "this account is suspended"}
+	}
+	// Checked only after the password, so it reveals nothing to a guesser.
+	if !panelAccepts(panelFrom(r.Context()), u.Role) {
+		s.auditAs(r.Context(), u.ID, u.Username, ip, "auth.login", "", false, "wrong panel")
+		return wrongPanel(u.Role)
+	}
+	if u.Role != rbac.User && !s.whmAllowed(r.Context(), ip) {
+		s.auditAs(r.Context(), u.ID, u.Username, ip, "auth.login", "", false, "not on WHM allow list")
+		return &apiError{403, "access_denied", "WHM sign-in from your address is not allowed"}
 	}
 	_, _ = s.db.Exec(r.Context(), `UPDATE users SET failed_logins = 0, locked_until = 0 WHERE id = ?`, u.ID)
 
@@ -219,7 +234,7 @@ func (s *Server) finishLogin(w http.ResponseWriter, r *http.Request, u *userRow)
 		return err
 	}
 	http.SetCookie(w, &http.Cookie{
-		Name: sessionCookie, Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode,
+		Name: cookieName(panelFrom(r.Context())), Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode,
 		Secure: s.isSecure(r), MaxAge: int(s.cfg.SessionTTL.Seconds()),
 	})
 	s.auditAs(r.Context(), u.ID, u.Username, s.clientIP(r), "auth.login", "", true, "")
@@ -265,7 +280,7 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) error {
 		_, _ = s.db.Exec(r.Context(), `DELETE FROM sessions WHERE id = ?`, p.SessionID)
 		s.audit(r, "auth.logout", "", true, "")
 	}
-	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode})
+	http.SetCookie(w, &http.Cookie{Name: cookieName(panelFrom(r.Context())), Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode})
 	w.WriteHeader(http.StatusNoContent)
 	return nil
 }

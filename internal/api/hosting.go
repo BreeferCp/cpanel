@@ -85,7 +85,7 @@ func (s *Server) within(ctx context.Context, table, accountID string, limit int,
 		return nil
 	}
 	switch table { // table names are constants from this file, never user input
-	case "domains", "db_instances", "mailboxes", "cron_jobs", "apps":
+	case "domains", "db_instances", "mailboxes", "cron_jobs", "apps", "ftp_accounts", "ip_blocks", "remote_mysql_hosts", "git_repos":
 	default:
 		return fmt.Errorf("within: unsupported table %q", table)
 	}
@@ -198,6 +198,13 @@ func (s *Server) vhostFor(ctx context.Context, d domain) (provision.Vhost, error
 		return v, err
 	}
 	v.ErrorPages = parseCodes(pages)
+	var accountID string
+	if err := s.db.QueryRow(ctx, `SELECT account_id FROM domains WHERE id = ?`, d.ID).Scan(&accountID); err != nil {
+		return v, err
+	}
+	if err := s.webProtection(ctx, accountID, d.ID, &v); err != nil {
+		return v, err
+	}
 	// An app attached to this domain keeps it proxied across rewrites.
 	_ = s.db.QueryRow(ctx, `SELECT port FROM apps WHERE domain_id = ? ORDER BY created_at LIMIT 1`, d.ID).Scan(&v.ProxyPort)
 	return v, nil

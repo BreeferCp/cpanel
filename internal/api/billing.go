@@ -264,7 +264,11 @@ func (s *Server) writeSSO(w http.ResponseWriter, r *http.Request, a *acct) error
 	}
 	token := s.signSSO(a.UserID)
 	s.audit(r, "sso.create", a.SysUser, true, "")
-	writeJSON(w, 200, map[string]any{"token": token, "path": "/sso#token=" + token, "expires_in": int(ssoTTL.Seconds())})
+	path := "/sso#token=" + token
+	// url is absolute and points at the cPanel port; path stays for
+	// integrations that build the URL themselves from the server address.
+	writeJSON(w, 200, map[string]any{"token": token, "path": path, "url": s.panelURL(r, PanelCPanel) + path,
+		"expires_in": int(ssoTTL.Seconds())})
 	return nil
 }
 
@@ -294,6 +298,9 @@ func (s *Server) ssoRedeem(w http.ResponseWriter, r *http.Request) error {
 	u, err := s.userByID(r.Context(), uid)
 	if err != nil || u.Suspended {
 		return &apiError{401, "invalid_token", "this sign-in link is invalid or has expired"}
+	}
+	if !panelAccepts(panelFrom(r.Context()), u.Role) {
+		return wrongPanel(u.Role)
 	}
 	return s.finishLogin(w, r, u)
 }

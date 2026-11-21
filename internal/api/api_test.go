@@ -25,6 +25,7 @@ type env struct {
 	t   *testing.T
 	srv *httptest.Server
 	db  *store.Store
+	s   *Server
 }
 
 const adminPW = "Admin-passphrase-42"
@@ -47,7 +48,7 @@ func newEnv(t *testing.T) *env {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	prov := provision.New(cfg, &system.Runner{DryRun: true, Log: log}, log)
 	s := New(cfg, db, prov, nil, log, "test")
-	ts := httptest.NewServer(s.Handler())
+	ts := httptest.NewServer(s.Handler(PanelBoth))
 	t.Cleanup(ts.Close)
 
 	hash, _ := auth.HashPassword(adminPW)
@@ -56,7 +57,7 @@ func newEnv(t *testing.T) *env {
 		ids.New(), "admin", "a@example.com", hash, now, now); err != nil {
 		t.Fatal(err)
 	}
-	return &env{t: t, srv: ts, db: db}
+	return &env{t: t, srv: ts, db: db, s: s}
 }
 
 type client struct {

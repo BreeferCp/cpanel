@@ -200,3 +200,55 @@ func (d *PowerDNS) ListRecords(ctx context.Context, zone string) ([]Record, erro
 	}
 	return out, nil
 }
+
+// DNSSECKey is a zone signing key as reported by PowerDNS.
+type DNSSECKey struct {
+	ID        int      `json:"id"`
+	KeyType   string   `json:"keytype"`
+	Active    bool     `json:"active"`
+	Algorithm string   `json:"algorithm"`
+	DS        []string `json:"ds"`
+	DNSKEY    string   `json:"dnskey"`
+}
+
+// DNSSECKeys lists a zone's signing keys (with the DS records to give to
+// the registrar).
+func (d *PowerDNS) DNSSECKeys(ctx context.Context, zone string) ([]DNSSECKey, error) {
+	if err := system.Domain(zone); err != nil {
+		return nil, err
+	}
+	if d.dryRun {
+		return nil, nil
+	}
+	out, err := d.do(ctx, http.MethodGet, "/zones/"+url.PathEscape(fqdn(zone))+"/cryptokeys", nil)
+	if err != nil {
+		return nil, err
+	}
+	var keys []DNSSECKey
+	return keys, json.Unmarshal(out, &keys)
+}
+
+// SetDNSSEC signs (one ECDSA P-256 combined key) or unsigns a zone.
+func (d *PowerDNS) SetDNSSEC(ctx context.Context, zone string, on bool) error {
+	keys, err := d.DNSSECKeys(ctx, zone)
+	if err != nil {
+		return err
+	}
+	base := "/zones/" + url.PathEscape(fqdn(zone))
+	if on {
+		if len(keys) == 0 {
+			if _, err := d.do(ctx, http.MethodPost, base+"/cryptokeys",
+				map[string]any{"keytype": "csk", "active": true, "algorithm": "ECDSAP256SHA256"}); err != nil {
+				return err
+			}
+		}
+	} else {
+		for _, k := range keys {
+			if _, err := d.do(ctx, http.MethodDelete, fmt.Sprintf("%s/cryptokeys/%d", base, k.ID), nil); err != nil {
+				return err
+			}
+		}
+	}
+	_, err = d.do(ctx, http.MethodPut, base+"/rectify", nil)
+	return err
+}

@@ -29,6 +29,12 @@ type Vhost struct {
 	// ErrorPages lists statuses with a custom page in ErrorDir/<code>.html.
 	ErrorPages []int
 	ErrorDir   string
+	// Protected paths require HTTP basic auth (document-root sites only).
+	Protected []ProtectedDir
+	// DenyIPs are refused on every location (IP blocker).
+	DenyIPs []string
+	// Hotlink, when set, refuses embedding static files from other sites.
+	Hotlink *Hotlink
 }
 
 // Redirect sends requests for an exact path to an absolute URL.
@@ -123,6 +129,12 @@ server {
     location ^~ /.well-known/acme-challenge/ { root {{.ACMERoot}}; }
     # Never serve dotfiles (.git, .env, .htpasswd) except ACME.
     location ~ /\.(?!well-known) { deny all; return 404; }
+{{- range .DenyIPs}}
+    deny {{.}};
+{{- end}}
+{{- if .DenyIPs}}
+    allow all;
+{{- end}}
 {{- range .Redirects}}
     location = {{.Source}} { return {{.Code}} {{.Target}}; }
 {{- end}}
@@ -146,6 +158,26 @@ server {
 {{- else}}
     root {{.DocRoot}};
     index index.php index.html;
+{{- if .HotlinkV}}
+    location ~* \.({{.HotlinkV.ExtRegex}})$ {
+        valid_referers {{.HotlinkV.Referers}};
+        if ($invalid_referer) { return 403; }
+    }
+{{- end}}
+{{- range .ProtectedV}}
+    location ^~ {{.Path}} {
+        auth_basic "{{.Realm}}";
+        auth_basic_user_file {{.File}};
+        try_files $uri $uri/ =404;
+        location ~ \.php$ {
+            try_files $uri =404;
+            include fastcgi_params;
+            fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+            fastcgi_param DOCUMENT_ROOT $realpath_root;
+            fastcgi_pass unix:{{$.Socket}};
+        }
+    }
+{{- end}}
     location / { try_files $uri $uri/ /index.php?$query_string; }
     location ~ \.php$ {
         try_files $uri =404;
@@ -161,10 +193,14 @@ server {
 
 type vhostView struct {
 	Vhost
-	ACMERoot string
-	LogDir   string
-	Socket   string
+	ACMERoot   string
+	LogDir     string
+	Socket     string
+	HotlinkV   *hotlinkView
+	ProtectedV []protectedView
 }
+
+type protectedView struct{ Path, Realm, File string }
 
 // RenderVhost produces nginx configuration text. Exposed for tests.
 func RenderVhost(v Vhost, a Account, acmeRoot string) (string, error) {
@@ -203,6 +239,31 @@ func RenderVhost(v Vhost, a Account, acmeRoot string) (string, error) {
 		ACMERoot: acmeRoot,
 		LogDir:   filepath.ToSlash(filepath.Join(a.Home, "logs")),
 		Socket:   fpmSocket(a.SysUser, v.PHP),
+	}
+	view.DenyIPs = make([]string, len(v.DenyIPs))
+	for i, ip := range v.DenyIPs {
+		c, err := BlockedCIDR(ip)
+		if err != nil {
+			return "", err
+		}
+		view.DenyIPs[i] = c
+	}
+	if v.Hotlink != nil {
+		if err := ValidateHotlink(*v.Hotlink); err != nil {
+			return "", err
+		}
+		hv := v.Hotlink.view(v.Domain, v.Aliases)
+		view.HotlinkV = &hv
+	}
+	for _, d := range v.Protected {
+		if err := ValidateProtectedDir(d); err != nil {
+			return "", err
+		}
+		if !reID.MatchString(d.ID) {
+			return "", fmt.Errorf("%w: protected directory id", system.ErrInvalid)
+		}
+		path := strings.TrimSuffix(d.Path, "/") + "/"
+		view.ProtectedV = append(view.ProtectedV, protectedView{Path: path, Realm: d.Realm, File: htpasswdPath(a.SysUser, d.ID)})
 	}
 	var b bytes.Buffer
 	if err := vhostTmpl.Execute(&b, view); err != nil {

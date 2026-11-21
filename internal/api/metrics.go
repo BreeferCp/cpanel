@@ -258,7 +258,7 @@ func (s *Server) topAccounts(w http.ResponseWriter, r *http.Request) error {
 
 func demoSample(t time.Time) Sample {
 	x := float64(t.Unix()) / 3600
-	wave := (math.Sin(x*2*math.Pi/24) + 1) / 2 // daily cycle
+	wave := (math.Sin(x*2*math.Pi/24) + 1) / 2       // daily cycle
 	jit := 0.6*math.Sin(x*3.1) + 0.4*math.Sin(x*7.3) // gentle, not noise
 	return Sample{
 		At: t.Unix(), CPU: round1(12 + 30*wave + 6*jit), MemPct: round1(38 + 10*wave + 2*jit),

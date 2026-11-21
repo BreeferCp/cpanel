@@ -1,8 +1,11 @@
 # BreeferCP daemon configuration. Environment variables prefixed BREEFER_
 # (for example BREEFER_LISTEN) override anything set here.
 
-# Address of the panel and API. Port 2087 mirrors WHM.
+# WHM (administrators and resellers). Port 2087 mirrors WHM.
 listen = 0.0.0.0:2087
+# cPanel (account holders), a separate panel with its own sessions.
+# Leave empty to serve both from listen.
+cpanel_listen = 0.0.0.0:2083
 
 # TLS for the panel. Leave empty only when running behind a TLS-terminating proxy.
 tls_cert = /etc/breefercp/panel.crt

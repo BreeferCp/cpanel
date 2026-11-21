@@ -30,6 +30,8 @@ type Principal struct {
 	// Scopes is non-nil only for API-token callers.
 	Scopes   []string
 	ViaToken bool
+	// TOTP is whether the user has two-factor authentication enabled.
+	TOTP bool
 }
 
 type ctxKey int
@@ -80,8 +82,17 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 		var p *Principal
 		if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
 			p = s.principalFromToken(ctx, strings.TrimPrefix(h, "Bearer "), s.clientIP(r))
-		} else if c, err := r.Cookie(sessionCookie); err == nil {
+		} else if c, err := r.Cookie(cookieName(panelFrom(ctx))); err == nil {
 			p = s.principalFromSession(ctx, c.Value)
+		}
+		// A credential only works on its own panel: customer sessions and
+		// tokens are refused by WHM, administrator ones by cPanel.
+		if p != nil && !panelAccepts(panelFrom(ctx), p.Role) {
+			p = nil
+		}
+		// WHM can be limited to an allow list of administrator addresses.
+		if p != nil && p.Role != rbac.User && !s.whmAllowed(ctx, s.clientIP(r)) {
+			p = nil
 		}
 		if p != nil {
 			ctx = context.WithValue(ctx, principalKey, p)
@@ -94,14 +105,15 @@ func (s *Server) principalFromSession(ctx context.Context, token string) *Princi
 	id := auth.HashToken(token)
 	now := time.Now().Unix()
 	var p Principal
-	var pending, suspended int
+	var pending, suspended, totp int
 	var role string
 	var owner *string
 	err := s.db.QueryRow(ctx, `
-		SELECT u.id, u.username, u.role, u.owner_id, u.suspended, s.id, s.csrf_token, s.pending_2fa
+		SELECT u.id, u.username, u.role, u.owner_id, u.suspended, s.id, s.csrf_token, s.pending_2fa, u.totp_enabled
 		FROM sessions s JOIN users u ON u.id = s.user_id
 		WHERE s.id = ? AND s.expires_at > ?`, id, now).
-		Scan(&p.UserID, &p.Username, &role, &owner, &suspended, &p.SessionID, &p.CSRF, &pending)
+		Scan(&p.UserID, &p.Username, &role, &owner, &suspended, &p.SessionID, &p.CSRF, &pending, &totp)
+	p.TOTP = totp == 1
 	if err != nil || suspended == 1 || pending == 1 {
 		return nil
 	}
@@ -161,6 +173,11 @@ func (s *Server) require(perm rbac.Permission, h handler) http.HandlerFunc {
 		}
 		if !rbac.Can(p.Role, perm) {
 			return errForbidden()
+		}
+		// With a 2FA policy, a session without 2FA may only reach its
+		// profile (to turn 2FA on). API tokens are exempt.
+		if !p.ViaToken && !p.TOTP && perm != rbac.ProfileWrite && s.twoFactorRequired(r.Context(), p.Role) {
+			return &apiError{403, "2fa_required", "your provider requires two-factor authentication; turn it on under Profile & Security"}
 		}
 		return h(w, r)
 	})

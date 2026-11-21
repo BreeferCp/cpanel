@@ -29,6 +29,9 @@ func (s *Server) RunJobs(ctx context.Context) {
 		case <-housekeeping.C:
 			s.purgeExpired(ctx)
 			s.purgePMAUsers(ctx)
+			s.runScheduledBackups(ctx)
+			s.autoUpdateTick(ctx)
+			s.wpAutoUpdateTick(ctx)
 		}
 	}
 }

@@ -14,8 +14,11 @@ import (
 
 // Config is the full runtime configuration of breeferd.
 type Config struct {
-	// Listen is the address of the panel/API HTTPS listener.
+	// Listen is the address of the WHM (administrator and reseller) panel.
 	Listen string
+	// CpanelListen is the address of the separate customer (cPanel) panel.
+	// Empty serves both panels from Listen, choosing the layout by role.
+	CpanelListen string
 	// TLSCert / TLSKey enable TLS on the panel. Empty means plain HTTP
 	// (only acceptable behind a reverse proxy or on loopback).
 	TLSCert string
@@ -62,6 +65,7 @@ type Config struct {
 func Default() Config {
 	return Config{
 		Listen:        "0.0.0.0:2087",
+		CpanelListen:  "0.0.0.0:2083",
 		DBDriver:      "sqlite",
 		DBDSN:         "/var/lib/breefercp/breefercp.db",
 		DataDir:       "/var/lib/breefercp",
@@ -130,6 +134,8 @@ func set(c *Config, k, v string) error {
 	switch k {
 	case "listen":
 		c.Listen = v
+	case "cpanel_listen":
+		c.CpanelListen = v
 	case "tls_cert":
 		c.TLSCert = v
 	case "tls_key":

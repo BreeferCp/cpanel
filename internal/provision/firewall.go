@@ -19,7 +19,9 @@ type FirewallRule struct {
 // baseOpenPorts are always reachable so the operator cannot lock themselves
 // out of the services the panel itself depends on.
 var baseOpenPorts = []struct{ proto, port string }{
-	{"tcp", "22"}, {"tcp", "80"}, {"tcp", "443"}, {"tcp", "2087"}, {"tcp", "8443"},
+	{"tcp", "22"}, {"tcp", "80"}, {"tcp", "443"}, {"tcp", "2087"}, {"tcp", "2083"}, {"tcp", "8443"},
+	{"tcp", "21"}, {"tcp", "30000-30999"}, // FTP control and the Pure-FTPd passive range
+	{"tcp", "110"},
 	{"tcp", "25"}, {"tcp", "465"}, {"tcp", "587"}, {"tcp", "993"}, {"tcp", "143"}, {"tcp", "995"},
 	{"tcp", "53"}, {"udp", "53"},
 }

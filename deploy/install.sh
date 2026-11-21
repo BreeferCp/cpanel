@@ -63,7 +63,7 @@ apt-get update -qq
 apt-get install -y -qq \
   nginx mariadb-server sqlite3 openssl curl ca-certificates cron nftables fail2ban \
   postfix postfix-sqlite dovecot-core dovecot-imapd dovecot-pop3d dovecot-lmtpd dovecot-sqlite \
-  opendkim opendkim-tools pdns-server pdns-backend-sqlite3 acl unzip zip
+  opendkim opendkim-tools pdns-server pdns-backend-sqlite3 acl unzip zip   dovecot-sieve dovecot-managesieved rspamd pure-ftpd quota file git
 
 for v in "${PHP_VERSIONS[@]}"; do
   apt-get install -y -qq "php${v}-fpm" "php${v}-cli" "php${v}-mysql" "php${v}-curl" "php${v}-mbstring" \
@@ -166,9 +166,43 @@ SigningTable refile:/etc/opendkim/signing.table
 DKIM
 touch /etc/opendkim/key.table /etc/opendkim/signing.table
 
+log "Configuring Rspamd (spam scoring for the per-account spam filters)"
+install -d /etc/rspamd/local.d
+cat > /etc/rspamd/local.d/milter_headers.conf <<'RSPAMD'
+# BreeferCP: X-Spam-Level carries one * per point; customer Sieve rules act on it.
+use = ["x-spamd-bar", "x-spam-level", "x-spam-status", "authentication-results"];
+skip_local = false;
+skip_authenticated = true;
+RSPAMD
+cat > /etc/rspamd/local.d/actions.conf <<'RSPAMD'
+# Reject only obvious spam at SMTP time; everything else is delivered and
+# filtered by each account's own threshold.
+reject = 25;
+add_header = 4;
+greylist = 12;
+RSPAMD
+systemctl enable --now rspamd
+
+log "Configuring Pure-FTPd (virtual users, chrooted, TLS)"
+PFC=/etc/pure-ftpd/conf
+install -d "$PFC" /etc/pure-ftpd/auth
+echo yes > "$PFC/ChrootEveryone"
+echo no > "$PFC/PAMAuthentication"
+echo no > "$PFC/UnixAuthentication"
+echo /etc/pure-ftpd/pureftpd.pdb > "$PFC/PureDB"
+echo "30000 30999" > "$PFC/PassivePortRange"
+echo 1000 > "$PFC/MinUID"
+echo yes > "$PFC/NoAnonymous"
+echo 1 > "$PFC/TLS"
+ln -sf ../conf/PureDB /etc/pure-ftpd/auth/50pure
+touch /etc/pure-ftpd/pureftpd.passwd && chmod 0600 /etc/pure-ftpd/pureftpd.passwd
+pure-pw mkdb /etc/pure-ftpd/pureftpd.pdb -f /etc/pure-ftpd/pureftpd.passwd
+install -d -m 0755 /etc/nginx/breefercp-htpasswd
+
 log "Writing configuration"
 cat > /etc/breefercp/breefercp.conf <<CONF
 listen = 0.0.0.0:2087
+cpanel_listen = 0.0.0.0:2083
 tls_cert = /etc/breefercp/panel.crt
 tls_key  = /etc/breefercp/panel.key
 db_driver = sqlite
@@ -193,6 +227,11 @@ if [[ ! -f /etc/breefercp/panel.crt ]]; then
   chmod 0640 /etc/breefercp/panel.key
   chown root:breefer /etc/breefercp/panel.key /etc/breefercp/panel.crt
 fi
+# Pure-FTPd expects key and certificate in one file.
+install -d -m 0700 /etc/ssl/private
+cat /etc/breefercp/panel.key /etc/breefercp/panel.crt > /etc/ssl/private/pure-ftpd.pem
+chmod 0600 /etc/ssl/private/pure-ftpd.pem
+systemctl enable --now pure-ftpd && systemctl restart pure-ftpd
 
 log "Installing developer tools (WP-CLI, Composer)"
 apt-get install -y -qq composer git

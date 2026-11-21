@@ -18,7 +18,8 @@ smtpd_recipient_restrictions =
     reject_unauth_destination,
     reject_rbl_client zen.spamhaus.org
 
-# DKIM signing and verification through OpenDKIM.
+# DKIM signing (OpenDKIM) and spam scoring (Rspamd).
 milter_default_action = accept
-smtpd_milters = inet:localhost:8891
+milter_protocol = 6
+smtpd_milters = inet:localhost:8891, inet:localhost:11332
 non_smtpd_milters = $smtpd_milters

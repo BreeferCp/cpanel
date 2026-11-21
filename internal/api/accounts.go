@@ -34,16 +34,18 @@ type pkg struct {
 	MaxProcs     int    `json:"max_procs"`
 	PHPVersions  string `json:"php_versions"`
 	ShellAccess  bool   `json:"shell_access"`
+	MaxFTP       int    `json:"max_ftp"`
+	FeatureList  string `json:"feature_list_id"`
 }
 
 const pkgCols = `id, name, disk_mb, bandwidth_mb, max_domains, max_databases, max_mailboxes, max_cron, max_apps,
-	cpu_percent, memory_mb, io_weight, max_procs, php_versions, shell_access`
+	cpu_percent, memory_mb, io_weight, max_procs, php_versions, shell_access, max_ftp, feature_list_id`
 
 func scanPkg(row rowScanner) (pkg, error) {
 	var p pkg
 	var shell int
 	err := row.Scan(&p.ID, &p.Name, &p.DiskMB, &p.BandwidthMB, &p.MaxDomains, &p.MaxDatabases, &p.MaxMailboxes,
-		&p.MaxCron, &p.MaxApps, &p.CPUPercent, &p.MemoryMB, &p.IOWeight, &p.MaxProcs, &p.PHPVersions, &shell)
+		&p.MaxCron, &p.MaxApps, &p.CPUPercent, &p.MemoryMB, &p.IOWeight, &p.MaxProcs, &p.PHPVersions, &shell, &p.MaxFTP, &p.FeatureList)
 	p.ShellAccess = shell == 1
 	return p, store.IsNoRows(err)
 }
@@ -53,7 +55,7 @@ func (p *pkg) validate() error {
 	if p.Name == "" || len(p.Name) > 64 {
 		return errBadRequest("package name is required (max 64 characters)")
 	}
-	for _, v := range []int{p.DiskMB, p.BandwidthMB, p.MaxDomains, p.MaxDatabases, p.MaxMailboxes, p.MaxCron, p.MaxApps} {
+	for _, v := range []int{p.DiskMB, p.BandwidthMB, p.MaxDomains, p.MaxDatabases, p.MaxMailboxes, p.MaxCron, p.MaxApps, p.MaxFTP} {
 		if v < 0 {
 			return errBadRequest("limits cannot be negative (0 means unlimited)")
 		}
@@ -119,16 +121,21 @@ func (s *Server) createPackage(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	p := principalFrom(r.Context())
+	if req.FeatureList != "" {
+		if err := s.ownedFeatureList(r.Context(), p, req.FeatureList); err != nil {
+			return errBadRequest("unknown feature list")
+		}
+	}
 	req.ID = ids.New()
 	shell := 0
 	if req.ShellAccess {
 		shell = 1
 	}
 	_, err := s.db.Exec(r.Context(), `INSERT INTO packages (id, owner_id, name, disk_mb, bandwidth_mb, max_domains, max_databases,
-		max_mailboxes, max_cron, max_apps, cpu_percent, memory_mb, io_weight, max_procs, php_versions, shell_access, created_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		max_mailboxes, max_cron, max_apps, cpu_percent, memory_mb, io_weight, max_procs, php_versions, shell_access, max_ftp, feature_list_id, created_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		req.ID, p.UserID, req.Name, req.DiskMB, req.BandwidthMB, req.MaxDomains, req.MaxDatabases, req.MaxMailboxes,
-		req.MaxCron, req.MaxApps, req.CPUPercent, req.MemoryMB, req.IOWeight, req.MaxProcs, req.PHPVersions, shell, time.Now().Unix())
+		req.MaxCron, req.MaxApps, req.CPUPercent, req.MemoryMB, req.IOWeight, req.MaxProcs, req.PHPVersions, shell, req.MaxFTP, req.FeatureList, time.Now().Unix())
 	if err != nil {
 		return err
 	}
@@ -159,14 +166,20 @@ func (s *Server) updatePackage(w http.ResponseWriter, r *http.Request) error {
 	if _, err := s.ownedPackage(r.Context(), p, r.PathValue("id")); err != nil {
 		return err
 	}
+	if req.FeatureList != "" {
+		if err := s.ownedFeatureList(r.Context(), p, req.FeatureList); err != nil {
+			return errBadRequest("unknown feature list")
+		}
+	}
 	shell := 0
 	if req.ShellAccess {
 		shell = 1
 	}
 	if _, err := s.db.Exec(r.Context(), `UPDATE packages SET name=?, disk_mb=?, bandwidth_mb=?, max_domains=?, max_databases=?,
-		max_mailboxes=?, max_cron=?, max_apps=?, cpu_percent=?, memory_mb=?, io_weight=?, max_procs=?, php_versions=?, shell_access=? WHERE id=?`,
+		max_mailboxes=?, max_cron=?, max_apps=?, cpu_percent=?, memory_mb=?, io_weight=?, max_procs=?, php_versions=?, shell_access=?,
+		max_ftp=?, feature_list_id=? WHERE id=?`,
 		req.Name, req.DiskMB, req.BandwidthMB, req.MaxDomains, req.MaxDatabases, req.MaxMailboxes, req.MaxCron, req.MaxApps,
-		req.CPUPercent, req.MemoryMB, req.IOWeight, req.MaxProcs, req.PHPVersions, shell, r.PathValue("id")); err != nil {
+		req.CPUPercent, req.MemoryMB, req.IOWeight, req.MaxProcs, req.PHPVersions, shell, req.MaxFTP, req.FeatureList, r.PathValue("id")); err != nil {
 		return err
 	}
 	// Re-apply cgroup limits to every account on this package.
@@ -223,25 +236,26 @@ func limitsOf(p pkg) provision.Limits {
 // ---- accounts ---------------------------------------------------------------
 
 type acct struct {
-	ID            string `json:"id"`
-	UserID        string `json:"user_id"`
-	Username      string `json:"username"`
-	Email         string `json:"email"`
-	PackageID     string `json:"package_id"`
-	PackageName   string `json:"package_name"`
-	SysUser       string `json:"sys_user"`
-	SysUID        int    `json:"sys_uid"`
-	HomeDir       string `json:"home_dir"`
-	PrimaryDomain string `json:"primary_domain"`
-	Status        string `json:"status"`
-	SuspendReason string `json:"suspend_reason"`
-	ExternalRef   string `json:"external_ref"`
-	DiskUsedMB    int    `json:"disk_used_mb"`
-	BWUsedMB      int    `json:"bw_used_mb"`
-	OwnerID       string `json:"owner_id"`
-	OwnerName     string `json:"owner_name"`
-	Shell         string `json:"shell"`
-	CreatedAt     int64  `json:"created_at"`
+	ID            string   `json:"id"`
+	UserID        string   `json:"user_id"`
+	Username      string   `json:"username"`
+	Email         string   `json:"email"`
+	PackageID     string   `json:"package_id"`
+	PackageName   string   `json:"package_name"`
+	SysUser       string   `json:"sys_user"`
+	SysUID        int      `json:"sys_uid"`
+	HomeDir       string   `json:"home_dir"`
+	PrimaryDomain string   `json:"primary_domain"`
+	Status        string   `json:"status"`
+	SuspendReason string   `json:"suspend_reason"`
+	ExternalRef   string   `json:"external_ref"`
+	DiskUsedMB    int      `json:"disk_used_mb"`
+	BWUsedMB      int      `json:"bw_used_mb"`
+	OwnerID       string   `json:"owner_id"`
+	OwnerName     string   `json:"owner_name"`
+	Shell         string   `json:"shell"`
+	Disabled      []string `json:"disabled_features"`
+	CreatedAt     int64    `json:"created_at"`
 	grandOwnerID  string
 	phpIniJSON    string
 	pkg           pkg
@@ -251,18 +265,22 @@ const acctSelect = `SELECT a.id, a.user_id, u.username, u.email, a.package_id, k
 	a.primary_domain, a.status, a.suspend_reason, a.external_ref, a.disk_used_mb, a.bw_used_mb, COALESCE(u.owner_id,''), a.created_at,
 	COALESCE(o.owner_id,''), COALESCE(o.username,''), a.shell,
 	k.cpu_percent, k.memory_mb, k.io_weight, k.max_procs, k.php_versions, k.disk_mb, k.max_domains, k.max_databases, k.max_mailboxes, k.max_cron, k.max_apps, k.shell_access,
-	COALESCE((SELECT ps.settings FROM php_settings ps WHERE ps.account_id = a.id), '{}')
+	COALESCE((SELECT ps.settings FROM php_settings ps WHERE ps.account_id = a.id), '{}'),
+	k.max_ftp, COALESCE((SELECT fl.disabled FROM feature_lists fl WHERE fl.id = k.feature_list_id), '')
 	FROM accounts a JOIN users u ON u.id = a.user_id JOIN packages k ON k.id = a.package_id LEFT JOIN users o ON o.id = u.owner_id`
 
 func scanAcct(row rowScanner) (*acct, error) {
 	var a acct
 	var shell int
+	var disabled string
 	err := row.Scan(&a.ID, &a.UserID, &a.Username, &a.Email, &a.PackageID, &a.PackageName, &a.SysUser, &a.SysUID, &a.HomeDir,
 		&a.PrimaryDomain, &a.Status, &a.SuspendReason, &a.ExternalRef, &a.DiskUsedMB, &a.BWUsedMB, &a.OwnerID, &a.CreatedAt,
 		&a.grandOwnerID, &a.OwnerName, &a.Shell,
 		&a.pkg.CPUPercent, &a.pkg.MemoryMB, &a.pkg.IOWeight, &a.pkg.MaxProcs, &a.pkg.PHPVersions, &a.pkg.DiskMB,
-		&a.pkg.MaxDomains, &a.pkg.MaxDatabases, &a.pkg.MaxMailboxes, &a.pkg.MaxCron, &a.pkg.MaxApps, &shell, &a.phpIniJSON)
+		&a.pkg.MaxDomains, &a.pkg.MaxDatabases, &a.pkg.MaxMailboxes, &a.pkg.MaxCron, &a.pkg.MaxApps, &shell, &a.phpIniJSON,
+		&a.pkg.MaxFTP, &disabled)
 	a.pkg.ShellAccess = shell == 1
+	a.Disabled = strings.Fields(disabled)
 	return &a, store.IsNoRows(err)
 }
 
@@ -602,6 +620,9 @@ func (s *Server) doSuspend(ctx context.Context, a *acct, reason string) error {
 	if err == nil {
 		_, err = s.db.Exec(ctx, `DELETE FROM sessions WHERE user_id=?`, a.UserID)
 	}
+	if err == nil {
+		s.syncFTPLogged(ctx) // suspended accounts lose FTP access
+	}
 	return err
 }
 
@@ -629,6 +650,9 @@ func (s *Server) doUnsuspend(ctx context.Context, a *acct) error {
 		return err
 	}
 	_, err := s.db.Exec(ctx, `UPDATE users SET suspended=0 WHERE id=?`, a.UserID)
+	if err == nil {
+		s.syncFTPLogged(ctx)
+	}
 	return err
 }
 
@@ -661,5 +685,9 @@ func (s *Server) doTerminate(ctx context.Context, a *acct) error {
 		return err
 	}
 	_, err = s.db.Exec(ctx, `DELETE FROM users WHERE id = ?`, a.UserID) // cascades
+	if err == nil {
+		s.syncFTPLogged(ctx)
+		_, _ = s.prov.Runner().Run(ctx, "rm", "-rf", "--", provision.HtpasswdDir+"/"+a.SysUser)
+	}
 	return err
 }

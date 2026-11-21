@@ -408,6 +408,9 @@ func (s *Server) createMailbox(w http.ResponseWriter, r *http.Request) error {
 		_, _ = s.db.Exec(context.WithoutCancel(r.Context()), `DELETE FROM mailboxes WHERE id = ?`, m.ID)
 		return err
 	}
+	if err := s.syncSieve(r.Context(), a, m.ID); err != nil {
+		s.log.Warn("sieve for new mailbox", "mailbox", m.Address, "err", err)
+	}
 	s.audit(r, "mailbox.create", m.Address, true, "")
 	writeJSON(w, 201, m)
 	return nil
