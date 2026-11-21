@@ -1,0 +1,24 @@
+# BreeferCP: append to /etc/postfix/main.cf (the installer does this for you).
+smtpd_tls_security_level = may
+smtpd_tls_auth_only = yes
+smtpd_tls_protocols = >=TLSv1.2
+smtp_tls_security_level = may
+
+virtual_mailbox_domains = sqlite:/etc/postfix/breefercp/domains.cf
+virtual_mailbox_maps    = sqlite:/etc/postfix/breefercp/mailboxes.cf
+virtual_alias_maps      = sqlite:/etc/postfix/breefercp/aliases.cf
+virtual_transport       = lmtp:unix:private/dovecot-lmtp
+
+smtpd_sasl_type = dovecot
+smtpd_sasl_path = private/auth
+smtpd_sasl_auth_enable = yes
+smtpd_recipient_restrictions =
+    permit_mynetworks,
+    permit_sasl_authenticated,
+    reject_unauth_destination,
+    reject_rbl_client zen.spamhaus.org
+
+# DKIM signing and verification through OpenDKIM.
+milter_default_action = accept
+smtpd_milters = inet:localhost:8891
+non_smtpd_milters = $smtpd_milters

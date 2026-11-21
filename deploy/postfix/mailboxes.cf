@@ -1,0 +1,2 @@
+dbpath = /var/lib/breefercp/breefercp.db
+query = SELECT address FROM mailboxes WHERE address = '%s' AND active = 1

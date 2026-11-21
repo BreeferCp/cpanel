@@ -1,0 +1,2 @@
+dbpath = /var/lib/breefercp/breefercp.db
+query = SELECT name FROM domains WHERE name = '%s'

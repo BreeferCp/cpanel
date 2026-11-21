@@ -1,0 +1,40 @@
+# BreeferCP daemon configuration. Environment variables prefixed BREEFER_
+# (for example BREEFER_LISTEN) override anything set here.
+
+# Address of the panel and API. Port 2087 mirrors WHM.
+listen = 0.0.0.0:2087
+
+# TLS for the panel. Leave empty only when running behind a TLS-terminating proxy.
+tls_cert = /etc/breefercp/panel.crt
+tls_key  = /etc/breefercp/panel.key
+
+# Database: "sqlite" for a single node, "postgres" for a cluster.
+db_driver = sqlite
+db_dsn    = /var/lib/breefercp/breefercp.db
+# db_driver = postgres
+# db_dsn    = postgres://breefer:secret@10.0.0.5:5432/breefercp?sslmode=verify-full
+
+data_dir = /var/lib/breefercp
+web_dir  = /usr/share/breefercp/web
+
+# Idle session lifetime.
+session_ttl = 12h
+
+# Customer databases. User needs CREATE USER and GRANT OPTION, nothing else.
+mariadb_dsn = breefer:CHANGE_ME@unix(/run/mysqld/mysqld.sock)/?interpolateParams=true
+
+# PowerDNS authoritative HTTP API.
+powerdns_url     = http://127.0.0.1:8081
+powerdns_api_key = CHANGE_ME
+
+home_base      = /home
+nginx_conf_dir = /etc/nginx/breefercp.d
+
+# User nginx and PHP-FPM run as (www-data on Debian/Ubuntu, nginx on RHEL-like systems).
+web_user = www-data
+
+# CIDRs of reverse proxies whose X-Forwarded-For header is trusted.
+# trusted_proxies = 127.0.0.1/32
+
+# Log host commands instead of running them (development only).
+dry_run = false

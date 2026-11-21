@@ -1,0 +1,3 @@
+dbpath = /var/lib/breefercp/breefercp.db
+# An exact alias wins over a catch-all (*@domain).
+query = SELECT destination FROM mail_aliases WHERE source = '%s' OR source = '*@%d' ORDER BY (source = '%s') DESC LIMIT 1

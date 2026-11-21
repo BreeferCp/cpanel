@@ -1,0 +1,32 @@
+[Unit]
+Description=BreeferCP control panel daemon
+Documentation=https://github.com/breefercp/breefercp
+After=network-online.target mariadb.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# The daemon provisions users, services and firewall rules, so it must run as root.
+# Everything below limits what a compromise of the daemon itself could reach.
+User=root
+Group=breefer
+UMask=0007
+ExecStart=/usr/local/bin/breeferd serve --config /etc/breefercp/breefercp.conf
+Restart=on-failure
+RestartSec=3
+LimitNOFILE=65536
+
+NoNewPrivileges=no
+ProtectSystem=full
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

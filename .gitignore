@@ -1,0 +1,16 @@
+# build output
+/dist/
+/web/dist/
+/web/node_modules/
+/.dev/
+*.exe
+# local data
+*.db
+*.db-wal
+*.db-shm
+dev-data/
+dev-home/
+# secrets
+*.key
+*.pem
+.env
