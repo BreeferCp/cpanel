@@ -24,3 +24,7 @@ Run the daemon with `BREEFER_DRY_RUN=true` (see the README) so nothing touches y
 ## Pull requests
 
 Describe the change and how you verified it. Anything that changes the security model should say so explicitly and update `docs/security.md`.
+
+## Credits
+
+Created and maintained by Shine Akhanda ([shineakhanda.dev](https://shineakhanda.dev)). By contributing you agree that your work is released under the project's AGPL-3.0-or-later license.
