@@ -31,7 +31,11 @@ var managedServices = map[string]string{
 }
 
 func (s *Server) serverStatus(w http.ResponseWriter, r *http.Request) error {
-	hostname, _ := os.Hostname()
+	// An administrator-configured hostname (Settings) wins over the OS value.
+	hostname := s.setting(r.Context(), "hostname")
+	if hostname == "" {
+		hostname, _ = os.Hostname()
+	}
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
 	var accounts, suspended int
