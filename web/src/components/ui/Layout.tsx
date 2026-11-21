@@ -1,23 +1,90 @@
 import clsx from "clsx";
-import { Loader2, type LucideIcon } from "lucide-react";
+import { ChevronRight, Loader2, type LucideIcon } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
+import { tools, whmNav } from "@/lib/catalog";
 import type { HTMLAttributes, ReactNode, TdHTMLAttributes, ThHTMLAttributes } from "react";
+
+/** Resolves the catalog entry for the current route (cPanel tool or WHM page). */
+function useCurrentTool(): { label: string; group: string; icon: LucideIcon; home: string; blurb?: string } | null {
+  const { pathname } = useLocation();
+  const m = pathname.match(/^\/(?:hosting|accounts\/[^/]+)\/([^/?]+)/);
+  if (m) {
+    const t = tools.find((x) => x.to.split("?")[0] === m[1]);
+    const home = pathname.startsWith("/hosting") ? "/hosting" : pathname.slice(0, pathname.indexOf("/", 10));
+    if (t) return { label: t.label, group: t.group, icon: t.icon, home, blurb: t.blurb };
+  }
+  for (const c of whmNav) {
+    const it = c.items.find((x) => x.to !== "/" && x.to === pathname);
+    if (it) return { label: it.label, group: c.title, icon: it.icon, home: "/", blurb: it.blurb };
+  }
+  const t = tools.find((x) => x.to.startsWith("/") && x.to === pathname);
+  if (t) return { label: t.label, group: t.group, icon: t.icon, home: "/hosting", blurb: t.blurb };
+  return null;
+}
 
 export function PageHeader({
   title,
   description,
   actions,
+  icon,
 }: {
   title: string;
   description?: string;
   actions?: ReactNode;
+  icon?: LucideIcon;
 }) {
+  const tool = useCurrentTool();
+  const Icon = icon ?? tool?.icon;
   return (
-    <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
-      <div className="min-w-0">
-        <h1 className="text-[19px] font-semibold tracking-tight text-ink">{title}</h1>
-        {description && <p className="mt-0.5 max-w-2xl text-[13px] text-muted">{description}</p>}
+    <div className="mb-5">
+      {tool && (
+        <nav aria-label="Breadcrumb" className="mb-2 flex items-center gap-1 text-[12px] text-muted">
+          <Link to={tool.home} className="hover:text-ink hover:underline">
+            Home
+          </Link>
+          <ChevronRight className="size-3 text-subtle" aria-hidden />
+          <span>{tool.group}</span>
+          <ChevronRight className="size-3 text-subtle" aria-hidden />
+          <span className="text-ink" aria-current="page">
+            {title}
+          </span>
+        </nav>
+      )}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          {Icon && (
+            <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg border border-line bg-accent-soft text-accent">
+              <Icon className="size-[18px]" aria-hidden />
+            </div>
+          )}
+          <div className="min-w-0">
+            <h1 className="text-[19px] font-semibold tracking-tight text-ink">{title}</h1>
+            {(description ?? tool?.blurb) && <p className="mt-0.5 max-w-2xl text-[13px] text-muted">{description ?? tool?.blurb}</p>}
+          </div>
+        </div>
+        {actions && <div className="flex shrink-0 flex-wrap items-center gap-2 sm:flex-nowrap">{actions}</div>}
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+    </div>
+  );
+}
+
+/** A short "how it works" note under a page header, collapsible. */
+export function HelpNote({ children, title = "How this works" }: { children: ReactNode; title?: string }) {
+  return (
+    <details className="group mb-4 rounded-lg border border-line bg-surface2/60 px-4 py-2.5 text-[13px] text-muted open:pb-3">
+      <summary className="cursor-pointer select-none font-medium text-ink marker:text-subtle">{title}</summary>
+      <div className="mt-2 space-y-1.5 leading-relaxed">{children}</div>
+    </details>
+  );
+}
+
+/** Small stat block used at the top of tool pages. */
+export function Stat({ label, value, hint, tone }: { label: string; value: ReactNode; hint?: string; tone?: "ok" | "warn" | "bad" }) {
+  return (
+    <div className="min-w-0 rounded-lg border border-line bg-surface px-4 py-3 shadow-card">
+      <div className="text-[11.5px] font-medium uppercase tracking-wide text-muted">{label}</div>
+      <div className={clsx("mt-1 truncate text-[20px] font-semibold tabular-nums", tone === "bad" ? "text-bad" : tone === "warn" ? "text-warn" : tone === "ok" ? "text-ok" : "text-ink")}>{value}</div>
+      {hint && <div className="mt-0.5 truncate text-[12px] text-muted">{hint}</div>}
     </div>
   );
 }

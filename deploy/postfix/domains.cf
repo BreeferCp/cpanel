@@ -1,2 +1,3 @@
 dbpath = /var/lib/breefercp/breefercp.db
-query = SELECT name FROM domains WHERE name = '%s'
+# Domains routed to a remote mail server (mail_routing = remote) are not local.
+query = SELECT name FROM domains WHERE name = '%s' AND mail_routing = 'local'

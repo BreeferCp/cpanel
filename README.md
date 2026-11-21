@@ -65,15 +65,17 @@ More in [docs/images](docs/images).
 | Area | What you get |
 |---|---|
 | Home | Live CPU, memory, load and network charts (1h, 6h, 24h), top accounts by resource use, open tickets, capacity; searchable, collapsible tool menu |
-| Accounts | List, create, modify (package, email, password, shell), suspend with reason, reactivate, terminate, sign in to the customer's cPanel; **Disk Usage Report** (over-quota accounts) |
-| Packages | Disk, bandwidth, domain, database, mailbox, cron, app and FTP quotas; CPU, memory, I/O and process limits (cgroups v2); PHP versions; shell access |
+| Account information | **List Accounts**, **List Suspended Accounts**, **List Domains** (every domain with owner, PHP and certificate status), **Disk and Bandwidth Usage** |
+| Account functions | Separate pages, each with search, sorting and bulk actions: **Create a New Account** (with package preview), **Modify an Account**, **Manage Account Suspension**, **Upgrade/Downgrade**, **Password Modification**, **Terminate Accounts** (typed confirmation); sign in to the customer's cPanel |
+| Packages | **Add / Edit / Duplicate a Package** on their own pages: disk, bandwidth, domain, database, mailbox, cron, app and FTP quotas; CPU, memory, I/O and process limits (cgroups v2); PHP versions; shell access |
 | **Feature Manager** | Feature lists that switch cPanel tools on or off per package, enforced by the API as well as hidden in the UI |
 | Resellers | Resellers and **master resellers** (who create resellers), each with account, disk and sub-reseller allocation limits |
-| Server | **Server Information**, Service Manager, **Process Manager**, Tweak Settings, nameservers with automatic glue records |
+| Server | **Basic WebHost Manager Setup**, **Server Time** (time zone, NTP sync), **Change Root Password** (re-authenticated), **Server Information**, Service Status, **Process Manager**, **Reboot** (graceful or forceful), nameservers with automatic glue records |
+| Software & SSL | **MultiPHP Manager** (bulk PHP version changes across accounts), **Manage AutoSSL** (certificate status of every domain, run AutoSSL now) |
 | **Updates** | One-click panel updates from GitHub releases verified against SHA-256 checksums, automatic or manual, with rollback; OS package upgrades |
 | DNS & email | **DNS Zones** across all accounts (with DNSSEC status), **Mail Queue Manager** (retry, delete, flush) |
-| Security Center | **Security Policy** (require 2FA for admins or everyone, WHM IP allow list), **Host Access Control** (cPHulk-style block and trust lists with a failed-login report), nftables firewall, audit log |
-| Backup | **Backup Configuration**: daily or weekly backups of every account with retention |
+| Security Center | **Security Advisor** (ranked findings with a link to the fix), **SSH Settings** (password auth, root login, port; validated with `sshd -t`), **Manage root's SSH Keys**, **Security Policy** (require 2FA for admins or everyone, WHM IP allow list), **Host Access Control** (cPHulk-style block and trust lists with a failed-login report), nftables firewall, audit log |
+| Backup | **Backup Configuration** (daily or weekly backups of every account with retention), **Backup Restoration** across all accounts |
 | Support | Ticket desk; **Email All Users** with an optional cPanel announcement banner |
 | Web server | nginx (default) or OpenLiteSpeed with `.htaccess` support and per-account LSAPI |
 
@@ -83,13 +85,14 @@ More in [docs/images](docs/images).
 |---|---|
 | Home | Tool groups with instant search (press `/`), general information, usage statistics, 24-hour CPU and memory charts, provider announcements |
 | Files | File manager (upload, edit, rename, copy, chmod, zip/unzip, download), disk usage, **FTP accounts** (FTPS, chrooted, per-account quota), backups with restore, **Git version control** (clone, pull, push over SSH) |
-| Domains | Addon domains, subdomains, aliases, redirects (301/302/307/308), DNS zone editor with **DNSSEC**, SSL (Let's Encrypt or own certificate), custom error pages |
-| Email | Mailboxes with quotas, forwarders, catch-all, DKIM and DMARC, **autoresponders** with date ranges, **spam filters** (score threshold, Junk or delete, allow and block lists), Roundcube webmail |
-| Databases | MariaDB databases, users and grants, phpMyAdmin single sign-on, **Remote MySQL** hosts |
-| Software | One-click app installer (WordPress, Drupal, Nextcloud, Matomo, Grav, DokuWiki, Laravel); **WordPress Toolkit** (see below); PHP manager; Node.js, Python and Ruby apps; Docker |
+| Domains | Domains, **Subdomains**, **Aliases**, redirects (301/302/307/308), DNS zone editor with **DNSSEC**, **Dynamic DNS** (dyndns-compatible update URL), SSL (Let's Encrypt or own certificate) |
+| Email | **Email Accounts** (quota, suspend, connect devices, bulk actions), **Forwarders** and **domain forwarders**, **Email Routing** (local or remote MX), **Default Address** (catch-all), **Mailing Lists** (distribution lists), **Email Filters** (global and per account, ordered, with a filter tester), **Track Delivery** (Postfix log search), **Email Deliverability** (SPF, DKIM, DMARC, MX and reverse DNS checks with one-click repair), **autoresponders**, **spam filters**, webmail |
+| Databases | MariaDB databases, users and grants, **Database Wizard**, phpMyAdmin single sign-on, **Remote MySQL** hosts |
+| Metrics | **Visitors** (latest hits, top pages, visitors and referrers), **Errors**, **Bandwidth** per domain per day, **Raw Access** log downloads, **Resource Usage** (CPU, memory, processes vs. limits) |
+| Software | One-click app installer (WordPress, Drupal, Nextcloud, Matomo, Grav, DokuWiki, Laravel); **WordPress Toolkit** (see below); **MultiPHP Manager** and **MultiPHP INI Editor**; **Optimize Website** (gzip); Node.js, Python and Ruby apps; Docker |
 | Security | SSL/TLS, **Directory Privacy** (password-protected folders), **IP Blocker**, **Hotlink Protection**, SSH keys |
-| Advanced | Browser terminal, cron jobs, access/error/PHP logs |
-| Account | Support tickets, password, two-factor authentication, sessions, API tokens |
+| Advanced | Browser terminal, cron jobs, **Track DNS** (lookup and traceroute), **Indexes** (directory listings), custom error pages, **MIME Types** |
+| Preferences | Password & Security, **Two-Factor Authentication**, **Manage API Tokens**, **Contact Information** (disk and bandwidth warning emails), support tickets |
 
 ### WordPress Toolkit
 
@@ -168,17 +171,17 @@ Working and tested:
 - Feature lists, enforced server side.
 - The account lifecycle, quotas and shell access control.
 - The file manager, resistant to symlink and zip-slip attacks.
-- Config generators for nginx (including directory privacy, IP blocks and hotlink rules), OpenLiteSpeed, PHP-FPM, systemd, nftables, cron, app units, Sieve and Pure-FTPd, all with injection tests.
+- Config generators for nginx (including directory privacy, IP blocks, hotlink rules, directory indexes, MIME types and compression), OpenLiteSpeed, PHP-FPM, systemd, nftables, cron, app units, Sieve and Pure-FTPd, all with injection tests.
 - SHA-512 crypt against the reference vectors.
 - The self-updater (checksum mismatch and path traversal tests).
 - The WordPress toolkit, tickets, metrics, the billing API and the full UI.
 
 Not done yet:
 
-1. **Live-server validation** of every provisioner and of the installer on real Debian and Ubuntu hosts. OpenLiteSpeed support is the least proven. Mail filtering (Rspamd and Sieve), FTP, DNSSEC and the WordPress toolkit's clone, push and restore commands have unit tests for their generated configuration and commands, but have not run against real services yet.
+1. **Live-server validation** of every provisioner and of the installer on real Debian and Ubuntu hosts. OpenLiteSpeed support is the least proven. Mail filtering (Rspamd and Sieve, including the new email filters), mailing lists, domain forwarders and email routing (Postfix SQLite maps), FTP, DNSSEC, SSH settings and the WordPress toolkit's clone, push and restore commands have unit tests for their generated configuration and commands, but have not run against real services yet.
 2. **Multi-node clusters:** PostgreSQL and `node_id` exist, but the node agent and scheduler are not written.
-3. **Account transfer** from cPanel (`cpmove` import) and other panels. Off-site backup targets (S3/SFTP) and bandwidth accounting from web logs.
-4. Mailing lists, email filters per mailbox, track delivery, virus scanning (ClamAV), ModSecurity/WAF, IP address manager, EasyApache-style module management.
+3. **Account transfer** from cPanel (`cpmove` import) and other panels. Off-site backup targets (S3/SFTP).
+4. Virus scanning (ClamAV), ModSecurity/WAF, Leech Protection, IP address manager, EasyApache-style module management, mailing-list archives and subscription pages (lists are distribution lists only), sub-users (cPanel User Manager), notification emails other than disk and bandwidth.
 5. Translations and an OpenAPI document.
 6. An independent security review before production use.
 

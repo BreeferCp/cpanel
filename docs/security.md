@@ -49,6 +49,15 @@ Every path is resolved with Go's `os.Root`, which refuses `..` and symlink escap
 - **WordPress toolkit:** every WP-CLI call runs as the account user. Database dumps and imports run as root but only against the installation's own validated database names, and dump files stay in root-owned directories. Restores unpack the archive as the account user. Clone and push refuse a destination inside its source (and the reverse). Smart updates back up first and roll back if the home page starts failing.
 - **Self-update:** releases install only when the tarball's SHA-256 matches the release's `SHA256SUMS`. The archive is extracted with path-traversal, link and size checks, and the previous binary and UI are kept for rollback. The checksum and the tarball come from the same GitHub release, so this protects against corrupted and tampered downloads in transit, not against a compromised GitHub account; signed releases are planned.
 
+## Features added in 0.4
+
+- **Email filters** are stored as structured rules (field, comparison, value, action) and rendered to Sieve with RFC 5228 escaping; folder names and redirect targets pass allow-lists, and `:matches` wildcards in values are escaped. Injection tests cover both.
+- **Mailing lists, domain forwarders and email routing** are read by Postfix through SQLite maps with fixed queries; members and targets are validated addresses and domains.
+- **Directory indexes, MIME types and compression** become nginx directives only after validation: index paths use the protected-directory allow-list, script extensions (`.php`, `.phar`, `.cgi` and similar) cannot be remapped, and MIME types must match `type/subtype`. An index on a protected folder is merged into its `auth_basic` location, so the listing never bypasses the password.
+- **Dynamic DNS** update URLs carry a 256-bit token stored only as a hash. A token changes one A/AAAA record and nothing else, is refused for suspended accounts, and failures are rate limited.
+- **WHM server tools:** changing the root password requires the caller's panel password again; SSH settings are validated with `sshd -t` and rolled back on error, and the panel refuses to turn off password logins without a root key, or to delete the last key while passwords are off; root keys with options (`command=`) are refused; server-wide domain and PHP views apply reseller tenancy.
+- **Track Delivery** only returns log lines whose sender or recipient is one of the caller's domains.
+
 ## Transport and headers
 
 TLS 1.2+ on the panel and all generated vhosts. The API sends `Content-Security-Policy` (`script-src 'self'`, no inline scripts), `X-Frame-Options: DENY`, `nosniff`, a strict referrer policy and HSTS over TLS.

@@ -32,6 +32,7 @@ func (s *Server) RunJobs(ctx context.Context) {
 			s.runScheduledBackups(ctx)
 			s.autoUpdateTick(ctx)
 			s.wpAutoUpdateTick(ctx)
+			s.quotaNotices(ctx)
 		}
 	}
 }

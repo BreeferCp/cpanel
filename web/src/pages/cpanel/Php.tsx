@@ -30,7 +30,7 @@ const choices: Record<string, string[]> = {
   error_reporting: ["E_ALL & ~E_DEPRECATED & ~E_STRICT", "E_ALL", "E_ALL & ~E_NOTICE", "0"],
 };
 
-export default function Php() {
+export default function Php({ view = "versions" }: { view?: "versions" | "ini" }) {
   const aid = useAccountId();
   const key = `/accounts/${aid}/php`;
   const domKey = `/accounts/${aid}/domains`;
@@ -54,9 +54,9 @@ export default function Php() {
 
   return (
     <>
-      <PageHeader title="PHP Manager" description="Choose the PHP version per domain and tune php.ini settings for your account." />
-      <div className="grid gap-5 xl:grid-cols-[1fr_1.2fr]">
-        <div className="space-y-5">
+      <PageHeader title={view === "ini" ? "MultiPHP INI Editor" : "MultiPHP Manager"} />
+      {view === "versions" && (
+        <div className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
           <Card title="Version per domain" flush>
             <Table>
               <thead>
@@ -97,7 +97,9 @@ export default function Php() {
             </Table>
           </Card>
         </div>
+      )}
 
+      {view === "ini" && (
         <Card
           title="php.ini settings"
           description="Applied to every PHP version your domains use. Security-sensitive settings stay under the administrator's control."
@@ -132,7 +134,7 @@ export default function Php() {
             </tbody>
           </Table>
         </Card>
-      </div>
+      )}
     </>
   );
 }

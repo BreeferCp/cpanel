@@ -159,6 +159,9 @@ func (s *Server) routes(mux *http.ServeMux) {
 	s.whmToolRoutes(mux)
 	s.wpToolkitRoutes(mux)
 	s.updateRoutes(mux)
+	s.emailToolRoutes(mux)
+	s.siteToolRoutes(mux)
+	s.whmMoreRoutes(mux)
 }
 
 // spa serves the built React app, falling back to index.html for client routes.

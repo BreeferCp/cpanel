@@ -1,0 +1,3 @@
+dbpath = /var/lib/breefercp/breefercp.db
+# Domain forwarders: user@domain becomes user@target.
+query = SELECT '%u@' || target FROM mail_domain_forwards WHERE domain = '%d'

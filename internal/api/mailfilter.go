@@ -68,16 +68,15 @@ func (s *Server) syncSieve(ctx context.Context, a *acct, mailboxID string) error
 		return err
 	}
 	type box struct {
-		local, domain string
+		id, local, domain string
 		ar            *provision.Autoresponder
 	}
 	var boxes []box
 	for rows.Next() {
 		var b box
-		var id string
 		var subj, body, start, end *string
 		var days *int
-		if err := rows.Scan(&id, &b.local, &b.domain, &subj, &body, &days, &start, &end); err != nil {
+		if err := rows.Scan(&b.id, &b.local, &b.domain, &subj, &body, &days, &start, &end); err != nil {
 			rows.Close()
 			return err
 		}
@@ -87,8 +86,15 @@ func (s *Server) syncSieve(ctx context.Context, a *acct, mailboxID string) error
 		boxes = append(boxes, b)
 	}
 	rows.Close()
+	if len(boxes) == 0 {
+		return nil
+	}
 	sp := s.spamPolicy(ctx, a.ID)
 	policy := provision.SpamPolicy{Enabled: sp.Enabled, Threshold: sp.Threshold, Action: sp.Action, Allow: sp.Allow, Deny: sp.Deny}
+	rules, err := s.mailRules(ctx, a.ID)
+	if err != nil {
+		return err
+	}
 	jail, err := files.Open(a.HomeDir, a.SysUID, a.SysUID)
 	if err != nil {
 		return err
@@ -97,11 +103,12 @@ func (s *Server) syncSieve(ctx context.Context, a *acct, mailboxID string) error
 	for _, b := range boxes {
 		dir := path.Join("mail", b.domain, b.local)
 		file := path.Join(dir, ".dovecot.sieve")
-		if !policy.Enabled && b.ar == nil {
+		filters := rulesFor(rules, b.id)
+		if !policy.Enabled && b.ar == nil && len(filters) == 0 {
 			_ = jail.Remove(file)
 			continue
 		}
-		script, err := provision.RenderSieve(policy, b.ar)
+		script, err := provision.RenderSieve(policy, b.ar, filters...)
 		if err != nil {
 			return err
 		}

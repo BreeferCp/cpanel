@@ -9,34 +9,42 @@ import { useAuth } from "@/state/auth";
 import { Button, IconButton } from "@/components/ui/Button";
 import { CopyField } from "@/components/ui/CopyField";
 import { Field, Input } from "@/components/ui/Form";
-import { Badge, Card, ErrorNote, Loading, Mono, PageHeader, Table, Tabs, Td, Th, Tr } from "@/components/ui/Layout";
+import { Badge, Card, ErrorNote, Loading, Mono, PageHeader, Table, Td, Th, Tr } from "@/components/ui/Layout";
 import { Modal } from "@/components/ui/Modal";
 
-type Tab = "security" | "sessions" | "tokens";
-
+/** Password & Security: password and signed-in sessions. */
 export default function Profile() {
-  const [tab, setTab] = useState<Tab>("security");
   const { user } = useAuth();
   return (
     <>
-      <PageHeader title="Profile & Security" description={`Signed in as ${user?.username} (${user?.email}).`} />
-      <Tabs
-        tabs={[
-          { id: "security", label: "Password & 2FA" },
-          { id: "sessions", label: "Sessions" },
-          { id: "tokens", label: "API tokens" },
-        ]}
-        value={tab}
-        onChange={setTab}
-      />
-      {tab === "security" && (
-        <div className="max-w-2xl space-y-5">
-          <PasswordCard />
-          <TwoFactorCard />
+      <PageHeader title="Password & Security" description={`Signed in as ${user?.username} (${user?.email}).`} />
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,28rem)_1fr]">
+        <PasswordCard />
+        <div className="min-w-0">
+          <h2 className="mb-2 text-[13.5px] font-semibold text-ink">Signed-in sessions</h2>
+          <Sessions />
         </div>
-      )}
-      {tab === "sessions" && <Sessions />}
-      {tab === "tokens" && <Tokens />}
+      </div>
+    </>
+  );
+}
+
+export function TwoFactorPage() {
+  return (
+    <>
+      <PageHeader title="Two-Factor Authentication" />
+      <div className="max-w-2xl">
+        <TwoFactorCard />
+      </div>
+    </>
+  );
+}
+
+export function ApiTokensPage() {
+  return (
+    <>
+      <PageHeader title="Manage API Tokens" />
+      <Tokens />
     </>
   );
 }

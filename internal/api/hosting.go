@@ -85,7 +85,7 @@ func (s *Server) within(ctx context.Context, table, accountID string, limit int,
 		return nil
 	}
 	switch table { // table names are constants from this file, never user input
-	case "domains", "db_instances", "mailboxes", "cron_jobs", "apps", "ftp_accounts", "ip_blocks", "remote_mysql_hosts", "git_repos":
+	case "domains", "db_instances", "mailboxes", "cron_jobs", "apps", "ftp_accounts", "ip_blocks", "remote_mysql_hosts", "git_repos", "dir_indexes", "mime_types", "ddns_hosts":
 	default:
 		return fmt.Errorf("within: unsupported table %q", table)
 	}
@@ -203,6 +203,9 @@ func (s *Server) vhostFor(ctx context.Context, d domain) (provision.Vhost, error
 		return v, err
 	}
 	if err := s.webProtection(ctx, accountID, d.ID, &v); err != nil {
+		return v, err
+	}
+	if err := s.siteOptions(ctx, accountID, d.ID, &v); err != nil {
 		return v, err
 	}
 	// An app attached to this domain keeps it proxied across rewrites.

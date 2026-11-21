@@ -69,7 +69,7 @@ function WhmNav({ onNavigate }: { onNavigate: () => void }) {
                 <ul className="space-y-px px-2">
                   {c.items.map((it) => (
                     <li key={it.to}>
-                      <NavLink to={it.to} end={it.to === "/"} onClick={onNavigate} className={navClass}>
+                      <NavLink to={it.to} end onClick={onNavigate} className={navClass}>
                         <it.icon className="size-4 shrink-0" aria-hidden />
                         {it.label}
                       </NavLink>

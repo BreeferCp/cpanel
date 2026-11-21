@@ -91,9 +91,15 @@ func sieveList(items []string) string {
 }
 
 // RenderSieve builds the managed Sieve script for one mailbox. Order:
-// allow list (keep), deny list (discard), spam rule, then the autoresponder,
+// allow list (keep), deny list (discard), user filters, spam rule, then the
+// autoresponder,
 // so spam never triggers an automatic reply.
-func RenderSieve(spam SpamPolicy, ar *Autoresponder) (string, error) {
+func RenderSieve(spam SpamPolicy, ar *Autoresponder, filters ...MailFilter) (string, error) {
+	for _, f := range filters {
+		if err := ValidateMailFilter(f); err != nil {
+			return "", err
+		}
+	}
 	if spam.Enabled {
 		if err := ValidateSpamPolicy(spam); err != nil {
 			return "", err
@@ -121,6 +127,13 @@ func RenderSieve(spam SpamPolicy, ar *Autoresponder) (string, error) {
 		if len(spam.Deny) > 0 {
 			b.WriteString("if address :all :contains \"from\" " + sieveList(spam.Deny) + " {\n    discard;\n    stop;\n}\n")
 		}
+	}
+	// User filters run after the sender lists and before the spam score, in
+	// the order the customer arranged them.
+	for _, f := range filters {
+		b.WriteString(f.sieve())
+	}
+	if spam.Enabled {
 		stars := strings.Repeat("*", spam.Threshold)
 		b.WriteString("if header :contains \"X-Spam-Level\" " + sieveString(stars) + " {\n")
 		if spam.Action == "discard" {

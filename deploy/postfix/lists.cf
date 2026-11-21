@@ -1,0 +1,3 @@
+dbpath = /var/lib/breefercp/breefercp.db
+# Distribution lists: members are comma separated, which Postfix expands.
+query = SELECT members FROM mailing_lists WHERE address = '%s' AND members <> ''

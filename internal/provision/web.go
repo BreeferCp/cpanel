@@ -35,6 +35,12 @@ type Vhost struct {
 	DenyIPs []string
 	// Hotlink, when set, refuses embedding static files from other sites.
 	Hotlink *Hotlink
+	// Indexes are paths that list their files when there is no index page.
+	Indexes []string
+	// Mime adds Content-Types for extra file extensions.
+	Mime []MimeType
+	// Gzip compresses responses (nil or mode off: disabled).
+	Gzip *Compression
 }
 
 // Redirect sends requests for an exact path to an absolute URL.
@@ -125,6 +131,15 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+{{- if .GzipTypes}}
+
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 5;
+    gzip_min_length 256;
+    gzip_types {{.GzipTypes}};
+{{- end}}
 
     location ^~ /.well-known/acme-challenge/ { root {{.ACMERoot}}; }
     # Never serve dotfiles (.git, .env, .htpasswd) except ACME.
@@ -164,10 +179,13 @@ server {
         if ($invalid_referer) { return 403; }
     }
 {{- end}}
-{{- range .ProtectedV}}
-    location ^~ {{.Path}} {
-        auth_basic "{{.Realm}}";
-        auth_basic_user_file {{.File}};
+{{- range .MimeV}}
+    location ~* \.({{.Ext}})$ { types { } default_type {{.Type}}; }
+{{- end}}
+{{- range .IndexV}}
+    location ^~ {{.}} {
+        autoindex on;
+        autoindex_exact_size off;
         try_files $uri $uri/ =404;
         location ~ \.php$ {
             try_files $uri =404;
@@ -178,7 +196,30 @@ server {
         }
     }
 {{- end}}
-    location / { try_files $uri $uri/ /index.php?$query_string; }
+{{- range .ProtectedV}}
+    location ^~ {{.Path}} {
+        auth_basic "{{.Realm}}";
+        auth_basic_user_file {{.File}};
+{{- if .Autoindex}}
+        autoindex on;
+{{- end}}
+        try_files $uri $uri/ =404;
+        location ~ \.php$ {
+            try_files $uri =404;
+            include fastcgi_params;
+            fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+            fastcgi_param DOCUMENT_ROOT $realpath_root;
+            fastcgi_pass unix:{{$.Socket}};
+        }
+    }
+{{- end}}
+    location / {
+{{- if .RootIndex}}
+        autoindex on;
+        autoindex_exact_size off;
+{{- end}}
+        try_files $uri $uri/ /index.php?$query_string;
+    }
     location ~ \.php$ {
         try_files $uri =404;
         include fastcgi_params;
@@ -198,9 +239,16 @@ type vhostView struct {
 	Socket     string
 	HotlinkV   *hotlinkView
 	ProtectedV []protectedView
+	IndexV     []string
+	RootIndex  bool
+	MimeV      []mimeView
+	GzipTypes  string
 }
 
-type protectedView struct{ Path, Realm, File string }
+type protectedView struct {
+	Path, Realm, File string
+	Autoindex         bool
+}
 
 // RenderVhost produces nginx configuration text. Exposed for tests.
 func RenderVhost(v Vhost, a Account, acmeRoot string) (string, error) {
@@ -264,6 +312,40 @@ func RenderVhost(v Vhost, a Account, acmeRoot string) (string, error) {
 		}
 		path := strings.TrimSuffix(d.Path, "/") + "/"
 		view.ProtectedV = append(view.ProtectedV, protectedView{Path: path, Realm: d.Realm, File: htpasswdPath(a.SysUser, d.ID)})
+	}
+	// Index paths that are also protected are listed inside the protected
+	// location: nginx refuses two locations with the same prefix.
+	protected := map[string]int{}
+	for i, p := range view.ProtectedV {
+		protected[p.Path] = i
+	}
+	seen := map[string]bool{}
+	for _, p := range v.Indexes {
+		if err := ValidateIndexPath(p); err != nil {
+			return "", err
+		}
+		if p == "/" {
+			view.RootIndex = true
+			continue
+		}
+		p = strings.TrimSuffix(p, "/") + "/"
+		if i, ok := protected[p]; ok {
+			view.ProtectedV[i].Autoindex = true
+		} else if !seen[p] {
+			view.IndexV = append(view.IndexV, p)
+		}
+		seen[p] = true
+	}
+	mv, err := mimeGroups(v.Mime)
+	if err != nil {
+		return "", err
+	}
+	view.MimeV = mv
+	if v.Gzip != nil && v.Gzip.Mode != "off" && v.Gzip.Mode != "" {
+		if err := ValidateCompression(*v.Gzip); err != nil {
+			return "", err
+		}
+		view.GzipTypes = v.Gzip.types()
 	}
 	var b bytes.Buffer
 	if err := vhostTmpl.Execute(&b, view); err != nil {

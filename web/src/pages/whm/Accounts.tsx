@@ -1,7 +1,7 @@
 import { Ban, LogIn, MoreHorizontal, Pencil, Plus, Search, Trash2, Users } from "lucide-react";
 import { ModifyAccount } from "./ModifyAccount";
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { formatMB, timeAgo } from "@/lib/format";
 import { useGet, useMutate } from "@/lib/hooks";
@@ -15,6 +15,7 @@ import { ConfirmDialog, Modal } from "@/components/ui/Modal";
 const blank = { username: "", email: "", domain: "", package_id: "", password: "" };
 
 export default function Accounts() {
+  const nav = useNavigate();
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   useEffect(() => {
@@ -79,10 +80,7 @@ export default function Accounts() {
           <Button
             variant="primary"
             icon={Plus}
-            onClick={() => {
-              setF({ ...blank, package_id: pkgs.data?.[0]?.id ?? "" });
-              setCreating(true);
-            }}
+            onClick={() => nav("/accounts/new")}
           >
             Create account
           </Button>

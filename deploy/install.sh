@@ -63,7 +63,7 @@ apt-get update -qq
 apt-get install -y -qq \
   nginx mariadb-server sqlite3 openssl curl ca-certificates cron nftables fail2ban \
   postfix postfix-sqlite dovecot-core dovecot-imapd dovecot-pop3d dovecot-lmtpd dovecot-sqlite \
-  opendkim opendkim-tools pdns-server pdns-backend-sqlite3 acl unzip zip   dovecot-sieve dovecot-managesieved rspamd pure-ftpd quota file git
+  opendkim opendkim-tools pdns-server pdns-backend-sqlite3 acl unzip zip   dovecot-sieve dovecot-managesieved rspamd pure-ftpd quota file git traceroute
 
 for v in "${PHP_VERSIONS[@]}"; do
   apt-get install -y -qq "php${v}-fpm" "php${v}-cli" "php${v}-mysql" "php${v}-curl" "php${v}-mbstring" \
@@ -146,7 +146,7 @@ systemctl enable --now nginx
 
 log "Configuring Postfix, Dovecot and OpenDKIM"
 install -d -m 0750 -o root -g postfix /etc/postfix/breefercp
-for f in domains mailboxes aliases; do install -m 0640 -o root -g postfix "$SRC/deploy/postfix/$f.cf" "/etc/postfix/breefercp/$f.cf"; done
+for f in domains mailboxes aliases lists domain_forwards; do install -m 0640 -o root -g postfix "$SRC/deploy/postfix/$f.cf" "/etc/postfix/breefercp/$f.cf"; done
 if ! grep -q 'BreeferCP' /etc/postfix/main.cf; then
   { echo; echo "# --- BreeferCP ---"; cat "$SRC/deploy/postfix/main.cf.snippet"; } >> /etc/postfix/main.cf
 fi

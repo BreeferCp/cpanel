@@ -36,6 +36,13 @@ var Features = []Feature{
 	{"email", "Email Accounts and Forwarders", "Email"},
 	{"autoresponders", "Autoresponders", "Email"},
 	{"spam_filter", "Spam Filters", "Email"},
+	{"forwarders", "Forwarders and Domain Forwarders", "Email"},
+	{"email_routing", "Email Routing", "Email"},
+	{"default_address", "Default Address", "Email"},
+	{"mailing_lists", "Mailing Lists", "Email"},
+	{"email_filters", "Email Filters", "Email"},
+	{"track_delivery", "Track Delivery", "Email"},
+	{"deliverability", "Email Deliverability", "Email"},
 	{"databases", "MySQL Databases", "Databases"},
 	{"phpmyadmin", "phpMyAdmin", "Databases"},
 	{"remote_mysql", "Remote MySQL", "Databases"},
@@ -47,7 +54,14 @@ var Features = []Feature{
 	{"cron", "Cron Jobs", "Advanced"},
 	{"ssh", "SSH Access", "Advanced"},
 	{"terminal", "Terminal", "Advanced"},
-	{"logs", "Logs", "Metrics"},
+	{"logs", "Errors and Raw Access", "Metrics"},
+	{"visitors", "Visitors", "Metrics"},
+	{"bandwidth", "Bandwidth", "Metrics"},
+	{"dynamic_dns", "Dynamic DNS", "Domains"},
+	{"indexes", "Indexes", "Advanced"},
+	{"mime_types", "MIME Types", "Advanced"},
+	{"track_dns", "Track DNS", "Advanced"},
+	{"optimize", "Optimize Website", "Software"},
 }
 
 func validFeature(k string) bool {
@@ -97,8 +111,36 @@ func featureFor(segs []string) string {
 		return "ip_blocker"
 	case "hotlink":
 		return "hotlink"
-	case "mailboxes", "mail-aliases", "mail":
+	case "mailboxes", "mail":
 		return "email"
+	case "mail-aliases", "domain-forwards":
+		return "forwarders"
+	case "email-routing":
+		return "email_routing"
+	case "default-address":
+		return "default_address"
+	case "mailing-lists":
+		return "mailing_lists"
+	case "mail-filters":
+		return "email_filters"
+	case "mail-delivery":
+		return "track_delivery"
+	case "email-deliverability":
+		return "deliverability"
+	case "visitors":
+		return "visitors"
+	case "bandwidth":
+		return "bandwidth"
+	case "ddns":
+		return "dynamic_dns"
+	case "indexes":
+		return "indexes"
+	case "mime-types":
+		return "mime_types"
+	case "dns-lookup", "traceroute":
+		return "track_dns"
+	case "optimize":
+		return "optimize"
 	case "autoresponders":
 		return "autoresponders"
 	case "spam":
