@@ -123,6 +123,10 @@ class BreeferCP extends Server
     public function loginUrl(Service $service): string
     {
         $res = $this->http()->post($this->path($service, 'sso'))->throw()->json();
+        // BreeferCP 0.3+ returns the absolute cPanel URL (port 2083).
+        if (!empty($res['url']) && preg_match('#^https?://#', $res['url'])) {
+            return $res['url'];
+        }
         return rtrim($this->config('host'), '/') . '/sso#token=' . rawurlencode($res['token']);
     }
 

@@ -173,6 +173,11 @@ function breefercp_UsageUpdate(array $params)
 function breefercp_sso_url(array $params): string
 {
     $res = breefercp_client($params)->post('/billing/accounts/' . rawurlencode((string) $params['serviceid']) . '/sso');
+    // BreeferCP 0.3+ returns the absolute cPanel URL (port 2083); customers
+    // cannot sign in on the WHM port the API is reached on.
+    if (!empty($res['url']) && preg_match('#^https?://#', $res['url'])) {
+        return $res['url'];
+    }
     $host = $params['serverhostname'] ?: $params['serverip'];
     $port = $params['serverport'] ?: 2087;
     $scheme = !empty($params['serversecure']) ? 'https' : 'http';

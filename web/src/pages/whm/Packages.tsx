@@ -3,9 +3,9 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import { formatLimit } from "@/lib/format";
 import { useGet, useMutate } from "@/lib/hooks";
-import type { Pkg } from "@/lib/types";
+import type { FeatureList, Pkg } from "@/lib/types";
 import { Button, IconButton } from "@/components/ui/Button";
-import { Field, Input, Switch } from "@/components/ui/Form";
+import { Field, Input, Select, Switch } from "@/components/ui/Form";
 import { Card, EmptyState, ErrorNote, Loading, PageHeader, Table, Td, Th, Tr } from "@/components/ui/Layout";
 import { ConfirmDialog, Modal } from "@/components/ui/Modal";
 
@@ -24,12 +24,15 @@ const blank: Omit<Pkg, "id"> = {
   max_procs: 200,
   php_versions: "8.3,8.2",
   shell_access: false,
+  max_ftp: 5,
+  feature_list_id: "",
 };
 
 type NumKey = { [K in keyof Pkg]: Pkg[K] extends number ? K : never }[keyof Pkg];
 
 export default function Packages() {
   const q = useGet<Pkg[]>("/packages");
+  const lists = useGet<FeatureList[]>("/feature-lists");
   const [edit, setEdit] = useState<Pkg | (Omit<Pkg, "id"> & { id?: undefined }) | null>(null);
   const [del, setDel] = useState<Pkg | null>(null);
 
@@ -141,6 +144,7 @@ export default function Packages() {
                 {num("max_mailboxes", "Mailboxes")}
                 {num("max_cron", "Cron jobs")}
                 {num("max_apps", "Applications")}
+                {num("max_ftp", "FTP accounts")}
               </div>
             </fieldset>
             <fieldset>
@@ -161,6 +165,18 @@ export default function Packages() {
                 <span className="text-[13px]">Shell access</span>
               </div>
             </div>
+            <Field label="Feature list" hint="Which cPanel tools this package includes. Manage lists in Feature Manager.">
+              {(id) => (
+                <Select id={id} value={edit.feature_list_id} onChange={(e) => setEdit({ ...edit, feature_list_id: e.target.value })}>
+                  <option value="">All features</option>
+                  {lists.data?.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
           </div>
         )}
       </Modal>

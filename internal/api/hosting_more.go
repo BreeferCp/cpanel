@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"runtime"
 	"strings"
 	"time"
 
@@ -84,6 +85,12 @@ func (s *Server) listFTP(w http.ResponseWriter, r *http.Request) error {
 // syncFTP regenerates the server-wide Pure-FTPd database. Suspended
 // accounts are left out, which disables their FTP logins.
 func (s *Server) syncFTP(ctx context.Context) error {
+	if s.cfg.DryRun && runtime.GOOS != "linux" {
+		// Development homes on Windows are "C:/..." paths, which the
+		// colon-separated Pure-FTPd format cannot hold; nothing is written in
+		// dry-run anyway.
+		return nil
+	}
 	rows, err := s.db.Query(ctx, `SELECT f.login, f.password_hash, a.sys_uid, a.home_dir, f.directory, f.quota_mb
 		FROM ftp_accounts f JOIN accounts a ON a.id = f.account_id WHERE a.status = 'active'`)
 	if err != nil {

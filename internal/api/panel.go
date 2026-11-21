@@ -100,9 +100,9 @@ func withPanel(p Panel, next http.Handler) http.Handler {
 // wrongPanel tells a user who signed in on the other panel where to go.
 func wrongPanel(role rbac.Role) error {
 	target := panelFor(role)
-	msg := "administrators and resellers sign in to WHM"
+	msg := "Administrators and resellers sign in to WHM."
 	if target == PanelCPanel {
-		msg = "account holders sign in to cPanel"
+		msg = "Hosting account holders sign in to cPanel."
 	}
 	return &apiError{403, "wrong_panel", msg}
 }

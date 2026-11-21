@@ -97,3 +97,42 @@ Under **Settings → Nameservers** set `ns1`/`ns2` host names and IPs. New DNS z
 ## Support tickets
 
 Customers' tickets go to whoever owns the customer (their reseller, or root). Replying marks a ticket *Answered*; a customer reply marks it *Customer reply*. Resellers can open tickets with their own provider from the same page.
+
+## WHM and cPanel are separate panels
+
+WHM runs on port 2087 and cPanel on port 2083. Administrators and resellers sign in to WHM only; hosting customers sign in to cPanel only. Signing in on the wrong one shows a link to the right one. The left menu of WHM is searchable and grouped like WHM's own (Server, Accounts, Packages, DNS & Email, Security Center, Backup, Support).
+
+## Feature Manager
+
+![Feature Manager](../images/whm-features.png)
+
+A **feature list** names the cPanel tools a package does *not* include, for example a "Starter" list without Terminal, Git and Remote MySQL. Create lists under **Packages → Feature Manager**, then choose one in each package's **Feature list** field. Disabled tools disappear from the customer's cPanel and the API refuses them (`feature_disabled`), so they cannot be reached by URL either. When you manage an account from WHM you always see every tool. A list that packages still use cannot be deleted.
+
+## Server tools (root)
+
+- **Server Information:** operating system, kernel, CPU, uptime, load, cgroup version, memory and every mounted filesystem.
+- **Process Manager:** all processes by memory use, filterable by user or command. Stop sends SIGTERM, with SIGKILL as an option. PID 1 and the panel itself are protected.
+- **Mail Queue Manager:** the Postfix queue with the reason each message is deferred. Retry or delete one message, retry everything, or empty the queue.
+- **DNS Zones:** every zone on the server with its account and DNSSEC state; *Edit zone* opens the account's Zone Editor.
+- **Disk Usage Report:** accounts by disk use against quota, with a filter for those at 90% or over.
+
+## Security Center (root)
+
+![Host Access Control](../images/whm-host-access.png)
+
+- **Security Policy:** require two-factor authentication for administrators and resellers, or for everyone. A user without 2FA can still sign in but can only open their profile until they turn it on. You must have 2FA yourself before enabling the policy. **WHM access by IP** limits WHM, not cPanel, to a list of addresses or ranges; the list must include the address you are using.
+- **Host Access Control:** brute-force protection for sign-in. Failed sign-ins are rate limited automatically. **Block** refuses an address or range outright; **Trust** exempts your office or monitoring from rate limiting. The right-hand table lists the last 24 hours of failed sign-ins by address, with a one-click Block.
+
+## Backup Configuration (root)
+
+Back up every active account daily or weekly at a chosen hour, with files, email and databases (or a subset), keeping the newest *N* scheduled backups per account. Customers see and restore them on their **Backups** page. Backups are stored on the server; copy `/var/lib/breefercp/backups` off-site.
+
+## Email All Users
+
+Write to all your customers (resellers: your own customers; root can also write to resellers or everyone). Root can also publish the subject as an **announcement** shown at the top of every cPanel until the customer dismisses it.
+
+## Updates (root)
+
+![Updates](../images/whm-updates.png)
+
+See [Installation → Updating](installation.md#updating). Panel updates are verified against the release checksums and can be rolled back. Operating system packages can be upgraded from the same page.

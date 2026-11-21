@@ -34,7 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setUnauthorizedHandler(() => {
       setUser(null);
-      qc.clear();
+      qc.removeQueries({ predicate: (q) => q.queryKey[0] !== "/panel" }); // keep which panel this is
     });
     void refresh();
   }, [refresh, qc]);
@@ -54,7 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } finally {
           setCsrf("");
           setUser(null);
-          qc.clear();
+          qc.removeQueries({ predicate: (q) => q.queryKey[0] !== "/panel" }); // keep which panel this is
         }
       },
     }),

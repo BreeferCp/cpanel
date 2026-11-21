@@ -69,11 +69,11 @@ Pick an application, a domain and (optionally) a folder. A database and database
 - **Drupal, Nextcloud, Matomo, Grav, DokuWiki** are downloaded from the official source; open the site afterwards to finish the setup wizard. The database name is shown under *Installed applications* and in **Databases**.
 - **Laravel** creates a Composer project; point the domain's document root at its `public` folder.
 
-## WordPress Manager
+## WordPress
 
-![WordPress Manager](../images/cp-wordpress.png)
+![WordPress Toolkit](../images/cp-wordpress.png)
 
-For every WordPress site: update WordPress core, update plugins and themes (one by one or all), activate or deactivate plugins, switch maintenance mode, flush the object cache, and reset any user's password without email.
+Sites installed here appear in the **WordPress Toolkit**, described in [its own section](#wordpress-toolkit) below.
 
 ## PHP Manager
 
@@ -102,3 +102,48 @@ If your plan includes shell access and your provider enabled it, **Terminal** op
 ## Support
 
 **Support** opens a ticket with your hosting provider. You get answers in the same thread, and can close or reopen the ticket.
+
+## Signing in
+
+Your provider gives you a cPanel address such as `https://server.example.com:2083`. The home page groups every tool; type in **Search tools** at the top (or press `/`) to jump to one. Tools your plan does not include are not shown. Notices from your provider appear at the top of the page.
+
+## FTP Accounts
+
+![FTP](../images/cp-ftp.png)
+
+Create logins such as `upload@yourdomain.com` for designers or tools. Each is locked to one folder of your home directory and can have its own quota. Connect with FTPS (FTP with explicit TLS) on port 21; plain FTP is refused.
+
+## Git Version Control
+
+Clone a public https repository (GitHub, GitLab, Bitbucket…) into a folder, for example `public_html` to deploy a site, then press **Pull** to fetch new commits. Or create an empty repository and push to it over SSH using the address shown on its card.
+
+## Autoresponders and spam filters
+
+- **Autoresponders:** an automatic reply for one mailbox, optionally only between two dates. Each sender gets at most one reply per interval. Spam never gets a reply.
+- **Spam Filters:** every message is scored. Turn filtering on, choose a threshold (5 suits most people), and move spam to the Junk folder or delete it. Senders on the **Always allow** list are never filtered; **Always block** senders are deleted on arrival.
+
+## Remote MySQL
+
+Add the address of a computer (or a range such as `203.0.113.%`) that should reach your databases directly. All your database users then accept connections from it with their usual password. Your provider must also open port 3306 in the firewall.
+
+## Directory Privacy, IP Blocker and Hotlink Protection
+
+- **Directory Privacy:** require a user name and password for a folder of your site, such as `/staging`. Add one or more users to each protected folder.
+- **IP Blocker:** refuse an address or range (for example `203.0.113.0/24`) on all your sites.
+- **Hotlink Protection:** stop other sites embedding your images and media. Your own domains are always allowed; add partner sites if needed.
+
+## DNSSEC
+
+At the bottom of the **Zone Editor**, switch on DNSSEC for a domain. The panel signs the zone and shows a **DS record**: add it at your domain registrar to complete the chain of trust. Switch off DNSSEC at the registrar first if you ever turn it off here.
+
+## WordPress Toolkit
+
+![WordPress security](../images/cp-wp-security.png)
+
+The toolkit lists every WordPress site in your account. **Scan for sites** adds ones installed by hand or migrated in.
+
+- **Overview:** WordPress version, **Smart update now**, automatic updates (core minor or all releases, plugins, themes), maintenance mode, search engine indexing and debug mode. Every update, manual or automatic, takes a backup first, checks the home page afterwards and **restores the backup automatically** if the site stopped working. The result of the last update is shown.
+- **Plugins / Themes:** install from wordpress.org by slug (the last part of the plugin's address, such as `wordpress-seo`), update, activate, deactivate or delete.
+- **Security:** a checklist with a **Fix** button for each fixable item (file editor, debug, XML-RPC and pingbacks, salts, `wp-config.php` permissions) and advice for the rest (modified core files, an `admin` user, pending updates).
+- **Backups:** back up files and database and restore any backup; a safety backup is taken before each restore.
+- **Clone & staging:** a **staging copy** on another domain or folder (create a subdomain such as `staging.yourdomain.com` first), with its own database and hidden from search engines. When it looks right, **Push to live** copies it over the live site after backing the live site up. **Clone** makes an independent copy.

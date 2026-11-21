@@ -12,5 +12,19 @@ export default defineConfig({
     port: 5173,
     proxy: { "/api": { target: "http://127.0.0.1:2087", changeOrigin: false } },
   },
-  build: { outDir: "dist", sourcemap: false, target: "es2022" },
+  build: {
+    outDir: "dist",
+    sourcemap: false,
+    target: "es2022",
+    rollupOptions: {
+      output: {
+        // Libraries change less often than the app, so they cache separately.
+        manualChunks: {
+          react: ["react", "react-dom", "react-router-dom"],
+          query: ["@tanstack/react-query"],
+          icons: ["lucide-react"],
+        },
+      },
+    },
+  },
 });

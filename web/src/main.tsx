@@ -6,6 +6,7 @@ import App from "./App";
 import { ToastProvider } from "./components/ui/Toast";
 import { ApiError } from "./lib/api";
 import { AuthProvider } from "./state/auth";
+import { PanelProvider } from "./state/panel";
 import { ThemeProvider } from "./state/theme";
 import "./index.css";
 
@@ -26,9 +27,11 @@ createRoot(document.getElementById("root")!).render(
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
           <BrowserRouter>
-            <AuthProvider>
-              <App />
-            </AuthProvider>
+            <PanelProvider>
+              <AuthProvider>
+                <App />
+              </AuthProvider>
+            </PanelProvider>
           </BrowserRouter>
         </ToastProvider>
       </QueryClientProvider>

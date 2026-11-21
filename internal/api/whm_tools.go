@@ -91,6 +91,11 @@ func (s *Server) getServerInfo(w http.ResponseWriter, r *http.Request) error {
 		disks = append(disks, disk{Mount: s.cfg.HomeBase, FS: "-", TotalMB: d["total_mb"], UsedMB: d["used_mb"]})
 	}
 	info["disks"] = disks
+	if info["demo"] == true { // non-Linux development build: sample values
+		info["memory"] = map[string]int64{"total_mb": 16384, "used_mb": 6800}
+		info["load"] = []float64{0.42, 0.38, 0.35}
+		info["disks"] = []disk{{Mount: "/", FS: "/dev/sda1", TotalMB: 40960, UsedMB: 11800}, {Mount: "/home", FS: "/dev/sdb1", TotalMB: 512000, UsedMB: 148000}}
+	}
 	writeJSON(w, 200, info)
 	return nil
 }

@@ -28,6 +28,8 @@ export interface Pkg {
   max_procs: number;
   php_versions: string;
   shell_access: boolean;
+  max_ftp: number;
+  feature_list_id: string;
 }
 
 export interface Account {
@@ -48,6 +50,7 @@ export interface Account {
   owner_id: string;
   owner_name: string;
   shell: "none" | "sftp" | "full";
+  disabled_features: string[] | null;
   created_at: number;
 }
 
@@ -365,4 +368,211 @@ export interface DiskUsage {
   databases_mb: number;
   limit_mb: number;
   used_mb: number;
+}
+
+// ---- dedicated panels, feature lists and new tools -------------------------
+
+export interface PanelInfo {
+  panel: "whm" | "cpanel" | "both";
+  whm_url: string;
+  cpanel_url: string;
+  webmail_url: string;
+  hostname: string;
+  announcement?: string;
+}
+
+export interface FeatureDef {
+  key: string;
+  label: string;
+  group: string;
+}
+
+export interface FeatureList {
+  id: string;
+  name: string;
+  disabled: string[];
+  packages: number;
+}
+
+export interface FtpAccount {
+  id: string;
+  login: string;
+  directory: string;
+  quota_mb: number;
+  created_at: number;
+}
+
+export interface Autoresponder {
+  mailbox_id: string;
+  address: string;
+  subject: string;
+  body: string;
+  interval_days: number;
+  starts_on: string;
+  ends_on: string;
+}
+
+export interface SpamPolicy {
+  enabled: boolean;
+  threshold: number;
+  action: "junk" | "discard";
+  allow: string[];
+  deny: string[];
+}
+
+export interface ProtectedDir {
+  id: string;
+  domain_id: string;
+  domain: string;
+  path: string;
+  realm: string;
+  users: string[];
+}
+
+export interface IPBlock {
+  id: string;
+  cidr: string;
+  created_at: number;
+}
+
+export interface HotlinkPolicy {
+  enabled: boolean;
+  allowed: string[];
+  extensions: string[];
+  allow_empty: boolean;
+}
+
+export interface RemoteHost {
+  id: string;
+  host: string;
+  note: string;
+  created_at: number;
+}
+
+export interface GitRepo {
+  id: string;
+  name: string;
+  path: string;
+  clone_url: string;
+  created_at: number;
+  ssh_url: string;
+  info: { branch: string; head: string; commit: string; when: string };
+}
+
+export interface DNSSECState {
+  enabled: boolean;
+  keys: { id: number; keytype: string; active: boolean; algorithm: string; ds: string[] | null }[];
+}
+
+export interface Proc {
+  pid: number;
+  user: string;
+  state: string;
+  cpu_seconds: number;
+  mem_mb: number;
+  command: string;
+}
+
+export interface QueuedMail {
+  id: string;
+  queue: string;
+  arrival: number;
+  size: number;
+  sender: string;
+  recipients: string[] | null;
+  reason: string;
+}
+
+export interface LoginRule {
+  id: string;
+  cidr: string;
+  kind: "allow" | "deny";
+  note: string;
+  created_at: number;
+}
+
+export interface LoginFailure {
+  ip: string;
+  failures: number;
+  last: number;
+  username: string;
+  blocked: boolean;
+}
+
+export interface BackupConfig {
+  enabled: boolean;
+  frequency: "daily" | "weekly";
+  weekday: number;
+  hour: number;
+  retention: number;
+  kind: "full" | "files" | "databases";
+  last_run: number;
+}
+
+export interface ServerInfo {
+  os?: string;
+  kernel?: string;
+  cpu?: string;
+  cores?: number;
+  uptime_s?: number;
+  cgroups?: string;
+  panel_version: string;
+  web_server: string;
+  database: string;
+  memory: { total_mb: number; used_mb: number };
+  load: number[];
+  disks: { mount: string; fs: string; total_mb: number; used_mb: number }[];
+  demo?: boolean;
+}
+
+export interface UpdateStatus {
+  current: string;
+  tier: "manual" | "automatic";
+  running: boolean;
+  error: string;
+  check_error: string;
+  available: boolean;
+  can_rollback: boolean;
+  checked_at?: number;
+  latest?: { version: string; name: string; notes: string; published_at: string; url: string };
+}
+
+export interface QuotaRow {
+  id: string;
+  user: string;
+  domain: string;
+  status: string;
+  used_mb: number;
+  limit_mb: number;
+  bw_used_mb: number;
+  percent: number;
+  over: boolean;
+}
+
+export interface ZoneRow {
+  zone: string;
+  account_id: string;
+  user: string;
+  dnssec: boolean;
+}
+
+export interface WPSite {
+  site: { site_url: string; indexing: boolean; debug: boolean; admins: string[] | null; db_name: string; table_prefix: string };
+  policy: { auto_core: "off" | "minor" | "major"; auto_plugins: boolean; auto_themes: boolean; staging_of: string; last_update_at: number; last_update_result: string };
+}
+
+export interface WPCheck {
+  id: string;
+  label: string;
+  ok: boolean;
+  fixable: boolean;
+  detail?: string;
+}
+
+export interface InstallBackup {
+  id: string;
+  reason: string;
+  size_bytes: number;
+  status: string;
+  created_at: number;
 }

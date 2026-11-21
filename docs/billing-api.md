@@ -48,7 +48,7 @@ POST /api/v1/billing/accounts
 
 ### Single sign-on
 
-`POST …/sso` returns `{"token": "…", "path": "/sso#token=…", "expires_in": 60}`. Redirect the customer's browser to `https://<panel>:2087` + `path`. The token is valid once for 60 seconds.
+`POST …/sso` returns `{"token": "…", "path": "/sso#token=…", "url": "https://<host>:2083/sso#token=…", "expires_in": 60}`. Redirect the customer's browser to `url`, which points at the cPanel port (customers cannot sign in on the WHM port 2087 the API is served from). The token is valid once for 60 seconds. When BreeferCP runs a single combined listener, `url` is empty and you use the API address + `path`.
 
 ### Errors
 

@@ -65,8 +65,9 @@ export default function Accounts() {
   });
   const unsuspend = useMutate((a: Account) => api.post(`/accounts/${a.id}/unsuspend`), { invalidate: [key], success: "Account reactivated" });
   const terminate = useMutate((a: Account) => api.del(`/accounts/${a.id}`), { invalidate: [key], success: "Account terminated", onSuccess: () => setDel(null) });
-  const sso = useMutate((a: Account) => api.post<{ path: string }>(`/accounts/${a.id}/sso`), {
-    onSuccess: (r) => window.open(r.path, "_blank", "noopener"),
+  const sso = useMutate((a: Account) => api.post<{ path: string; url: string }>(`/accounts/${a.id}/sso`), {
+    // url points at the cPanel port; path is the fallback on a combined listener.
+    onSuccess: (r) => window.open(r.url || r.path, "_blank", "noopener"),
   });
 
   return (

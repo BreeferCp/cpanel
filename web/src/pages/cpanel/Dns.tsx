@@ -2,10 +2,11 @@ import { Network, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useGet, useMutate } from "@/lib/hooks";
-import type { DnsRecord, Domain } from "@/lib/types";
+import type { DNSSECState, DnsRecord, Domain } from "@/lib/types";
+import { CopyField } from "@/components/ui/CopyField";
 import { useAccountId } from "@/state/scope";
 import { Button, IconButton } from "@/components/ui/Button";
-import { Field, Input, Select } from "@/components/ui/Form";
+import { Field, Input, Select, Switch } from "@/components/ui/Form";
 import { Badge, Card, EmptyState, ErrorNote, Loading, Mono, PageHeader, Table, Td, Th, Tr } from "@/components/ui/Layout";
 import { ConfirmDialog, Modal } from "@/components/ui/Modal";
 
@@ -116,6 +117,7 @@ export default function Dns() {
           </Table>
         )}
       </Card>
+      {zone && <DnssecCard aid={aid} zone={zone} />}
 
       <Modal
         open={adding}
@@ -171,5 +173,39 @@ export default function Dns() {
         message={del ? <>All <Mono>{del.type}</Mono> records named <Mono>{rel(del.name)}</Mono> will be removed.</> : null}
       />
     </>
+  );
+}
+
+/** DNSSEC signing for the selected zone, with the DS record for the registrar. */
+function DnssecCard({ aid, zone }: { aid: string; zone: string }) {
+  const key = `/accounts/${aid}/dnssec/${zone}`;
+  const q = useGet<DNSSECState>(key);
+  const set = useMutate((on: boolean) => api.put(key, { enabled: on }), {
+    invalidate: [key],
+    success: (_r, on) => (on ? "Zone signed with DNSSEC" : "DNSSEC turned off"),
+  });
+  const ds = q.data?.keys.flatMap((k) => k.ds ?? []) ?? [];
+  return (
+    <Card
+      className="mt-4"
+      title="DNSSEC"
+      description="Signs this zone so resolvers can detect forged answers. After enabling, add the DS record at your domain registrar."
+      actions={<Switch checked={!!q.data?.enabled} disabled={set.isPending || q.isLoading} onChange={(v) => set.mutate(v)} label="DNSSEC" />}
+    >
+      {q.data?.enabled ? (
+        ds.length ? (
+          <div className="space-y-2">
+            <div className="text-[12.5px] text-muted">DS record{ds.length > 1 ? "s" : ""} to publish at the registrar:</div>
+            {ds.map((d) => (
+              <CopyField key={d} value={d} />
+            ))}
+          </div>
+        ) : (
+          <p className="text-[13px] text-muted">Signing keys are being generated.</p>
+        )
+      ) : (
+        <p className="text-[13px] text-muted">Not signed.</p>
+      )}
+    </Card>
   );
 }

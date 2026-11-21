@@ -40,12 +40,12 @@ export function Card({
   return (
     <section className={clsx("min-w-0 rounded-lg border border-line bg-surface shadow-card", className)}>
       {(title || actions) && (
-        <header className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
           <div className="min-w-0">
             {title && <h2 className="text-[13.5px] font-semibold text-ink">{title}</h2>}
-            {description && <p className="mt-0.5 text-[12.5px] text-muted">{description}</p>}
+            {description && <p className="mt-0.5 text-[12.5px] text-muted [overflow-wrap:anywhere]">{description}</p>}
           </div>
-          {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+          {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
         </header>
       )}
       <div className={flush ? "" : "p-4"}>{children}</div>
@@ -146,7 +146,7 @@ export function Meter({ used, limit, format }: { used: number; limit: number; fo
 
 export function Table({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className="overflow-x-auto">
+    <div className="relative overflow-x-auto">
       <table className={clsx("w-full border-collapse text-left text-[13px]", className)}>{children}</table>
     </div>
   );
@@ -185,7 +185,7 @@ export function Tabs<T extends string>({
   onChange: (v: T) => void;
 }) {
   return (
-    <div role="tablist" className="mb-4 flex gap-1 border-b border-line">
+    <div role="tablist" className="mb-4 flex flex-wrap gap-x-1 border-b border-line">
       {tabs.map((t) => (
         <button
           key={t.id}
