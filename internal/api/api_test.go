@@ -281,3 +281,149 @@ func TestSSOIsSingleUse(t *testing.T) {
 		t.Fatalf("tampered sso token must fail, got %d", code)
 	}
 }
+
+func TestMasterResellerHierarchy(t *testing.T) {
+	e := newEnv(t)
+	admin := e.login("admin", adminPW)
+
+	// root creates a master reseller allowed one sub-reseller and two accounts.
+	if code := e.do(admin, "POST", "/api/v1/resellers", map[string]any{"username": "master", "email": "m@example.com",
+		"password": "Master-pass-1234", "is_master": true, "max_resellers": 1, "max_accounts": 2, "max_disk_mb": 0}, nil); code != 201 {
+		t.Fatalf("create master: %d", code)
+	}
+	master := e.login("master", "Master-pass-1234")
+	if code := e.do(master, "POST", "/api/v1/resellers", map[string]any{"username": "sub", "email": "s@example.com", "password": "Sub-pass-123456"}, nil); code != 201 {
+		t.Fatalf("master creates reseller: %d", code)
+	}
+	if code := e.do(master, "POST", "/api/v1/resellers", map[string]any{"username": "sub2", "email": "s@example.com", "password": "Sub-pass-123456"}, nil); code != 422 {
+		t.Fatalf("max_resellers must be enforced, got %d", code)
+	}
+	sub := e.login("sub", "Sub-pass-123456")
+	if code := e.do(sub, "POST", "/api/v1/resellers", map[string]any{"username": "sub3", "email": "s@example.com", "password": "Sub-pass-123456"}, nil); code != 403 {
+		t.Fatalf("plain reseller must not create resellers, got %d", code)
+	}
+
+	// The sub-reseller provisions a customer; the master sees it, a sibling does not.
+	var pk pkg
+	if code := e.do(sub, "POST", "/api/v1/packages", starter, &pk); code != 201 {
+		t.Fatalf("sub package: %d", code)
+	}
+	var res createdAccount
+	if code := e.do(sub, "POST", "/api/v1/accounts", map[string]any{"username": "cust1", "email": "c@example.com", "domain": "cust1.com", "package_id": pk.ID}, &res); code != 201 {
+		t.Fatalf("sub creates account: %d", code)
+	}
+	if code := e.do(master, "GET", "/api/v1/accounts/"+res.Account.ID, nil, nil); code != 200 {
+		t.Fatalf("master must see its reseller's customer, got %d", code)
+	}
+	if code := e.do(admin, "POST", "/api/v1/resellers", map[string]any{"username": "other", "email": "o@example.com", "password": "Other-pass-1234"}, nil); code != 201 {
+		t.Fatal("create sibling reseller")
+	}
+	other := e.login("other", "Other-pass-1234")
+	if code := e.do(other, "GET", "/api/v1/accounts/"+res.Account.ID, nil, nil); code != 404 {
+		t.Fatalf("unrelated reseller must get 404, got %d", code)
+	}
+	var list []map[string]any
+	e.do(master, "GET", "/api/v1/accounts", nil, &list)
+	if len(list) != 1 {
+		t.Fatalf("master account list: want 1 got %d", len(list))
+	}
+}
+
+func TestResellerAllocationLimits(t *testing.T) {
+	e := newEnv(t)
+	admin := e.login("admin", adminPW)
+	e.do(admin, "POST", "/api/v1/resellers", map[string]any{"username": "rsl", "email": "r@example.com", "password": "Resell-pass-123", "max_accounts": 1, "max_disk_mb": 6000}, nil)
+	rs := e.login("rsl", "Resell-pass-123")
+	var pk pkg
+	e.do(rs, "POST", "/api/v1/packages", starter, &pk) // 5000 MB disk
+	if code := e.do(rs, "POST", "/api/v1/accounts", map[string]any{"username": "one", "email": "o@example.com", "domain": "one-site.com", "package_id": pk.ID}, nil); code != 201 {
+		t.Fatalf("first account: %d", code)
+	}
+	if code := e.do(rs, "POST", "/api/v1/accounts", map[string]any{"username": "two", "email": "t@example.com", "domain": "two-site.com", "package_id": pk.ID}, nil); code != 422 {
+		t.Fatalf("max_accounts must be enforced, got %d", code)
+	}
+}
+
+func TestTicketsAreIsolated(t *testing.T) {
+	e := newEnv(t)
+	admin := e.login("admin", adminPW)
+	var pk pkg
+	e.do(admin, "POST", "/api/v1/packages", starter, &pk)
+	for _, n := range []string{"tina", "tom"} {
+		e.do(admin, "POST", "/api/v1/accounts", map[string]any{"username": n, "email": n + "@example.com", "domain": n + "-site.com", "package_id": pk.ID, "password": "Strong-pass-" + n + "-9"}, nil)
+	}
+	tina := e.login("tina", "Strong-pass-tina-9")
+	tom := e.login("tom", "Strong-pass-tom-9")
+	var tk ticket
+	if code := e.do(tina, "POST", "/api/v1/tickets", map[string]string{"subject": "Site down", "body": "Please help"}, &tk); code != 201 {
+		t.Fatalf("open ticket: %d", code)
+	}
+	if code := e.do(tom, "GET", "/api/v1/tickets/"+tk.ID, nil, nil); code != 404 {
+		t.Fatalf("another customer must not read the ticket, got %d", code)
+	}
+	if code := e.do(admin, "POST", "/api/v1/tickets/"+tk.ID+"/replies", map[string]string{"body": "Looking into it"}, nil); code != 204 {
+		t.Fatalf("staff reply: %d", code)
+	}
+	var got struct {
+		Ticket   ticket          `json:"ticket"`
+		Messages []ticketMessage `json:"messages"`
+	}
+	e.do(tina, "GET", "/api/v1/tickets/"+tk.ID, nil, &got)
+	if got.Ticket.Status != "answered" || len(got.Messages) != 2 || !got.Messages[1].Staff {
+		t.Fatalf("unexpected ticket state: %+v", got)
+	}
+	if code := e.do(tina, "PATCH", "/api/v1/tickets/"+tk.ID, map[string]string{"status": "answered"}, nil); code != 403 {
+		t.Fatalf("customer must not mark answered, got %d", code)
+	}
+}
+
+func TestShellRequiresPackagePermission(t *testing.T) {
+	e := newEnv(t)
+	admin := e.login("admin", adminPW)
+	var pk pkg
+	e.do(admin, "POST", "/api/v1/packages", starter, &pk) // shell_access false
+	var res createdAccount
+	e.do(admin, "POST", "/api/v1/accounts", map[string]any{"username": "shelly", "email": "s@example.com", "domain": "shelly-site.com", "package_id": pk.ID}, &res)
+	if code := e.do(admin, "PUT", "/api/v1/accounts/"+res.Account.ID+"/shell", map[string]string{"mode": "full"}, nil); code != 409 {
+		t.Fatalf("full shell without package permission: want 409 got %d", code)
+	}
+	if code := e.do(admin, "PUT", "/api/v1/accounts/"+res.Account.ID+"/shell", map[string]string{"mode": "sftp"}, nil); code != 204 {
+		t.Fatalf("sftp shell: %d", code)
+	}
+	if code := e.do(admin, "PUT", "/api/v1/accounts/"+res.Account.ID+"/shell", map[string]string{"mode": "root"}, nil); code != 400 {
+		t.Fatalf("invalid mode: want 400 got %d", code)
+	}
+}
+
+func TestPMARedeemIsLoopbackAndSingleUse(t *testing.T) {
+	e := newEnv(t)
+	admin := e.login("admin", adminPW)
+	var pk pkg
+	e.do(admin, "POST", "/api/v1/packages", starter, &pk)
+	var res createdAccount
+	e.do(admin, "POST", "/api/v1/accounts", map[string]any{"username": "dbby", "email": "d@example.com", "domain": "dbby-site.com", "package_id": pk.ID}, &res)
+	base := "/api/v1/accounts/" + res.Account.ID
+	if code := e.do(admin, "POST", base+"/phpmyadmin", nil, nil); code != 409 {
+		t.Fatalf("no databases yet: want 409 got %d", code)
+	}
+	e.do(admin, "POST", base+"/databases", map[string]string{"name": "shop"}, nil)
+	var out struct{ URL string }
+	if code := e.do(admin, "POST", base+"/phpmyadmin", nil, &out); code != 200 {
+		t.Fatalf("pma login: %d", code)
+	}
+	token := out.URL[strings.Index(out.URL, "token=")+6:]
+	// httptest listens on loopback, so the first redeem succeeds and the second must not.
+	if code := e.do(nil, "POST", "/api/v1/internal/pma/redeem", map[string]string{"token": token}, nil); code != 200 {
+		t.Fatalf("redeem: %d", code)
+	}
+	if code := e.do(nil, "POST", "/api/v1/internal/pma/redeem", map[string]string{"token": token}, nil); code != 401 {
+		t.Fatalf("second redeem must fail, got %d", code)
+	}
+}
+
+func TestSuccessfulLoginsAreNotRateLimited(t *testing.T) {
+	e := newEnv(t)
+	for i := 0; i < 25; i++ {
+		e.login("admin", adminPW) // fails the test on any non-200
+	}
+}

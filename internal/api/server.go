@@ -31,6 +31,8 @@ type Server struct {
 	loginLimit *rateLimiter
 	apiLimit   *rateLimiter
 	started    time.Time
+	metrics    *metricsRing
+	cgroups    *cgroupSampler
 	version    string
 }
 
@@ -42,6 +44,8 @@ func New(cfg config.Config, db *store.Store, prov *provision.Provisioner, mdb *s
 		loginLimit: newRateLimiter(10, 5*time.Minute),
 		apiLimit:   newRateLimiter(600, time.Minute),
 		started:    time.Now(),
+		metrics:    &metricsRing{},
+		cgroups:    newCgroupSampler(),
 	}
 	for _, c := range cfg.TrustedProxies {
 		if _, n, err := net.ParseCIDR(strings.TrimSpace(c)); err == nil {
@@ -121,6 +125,8 @@ func (s *Server) routes(mux *http.ServeMux) {
 	s.route(mux, "DELETE /api/v1/packages/{id}", rbac.PackagesWrite, s.deletePackage)
 	s.route(mux, "GET /api/v1/resellers", rbac.ResellersWrite, s.listResellers)
 	s.route(mux, "POST /api/v1/resellers", rbac.ResellersWrite, s.createReseller)
+	s.route(mux, "PATCH /api/v1/resellers/{id}", rbac.ResellersWrite, s.updateReseller)
+	s.route(mux, "DELETE /api/v1/resellers/{id}", rbac.ResellersWrite, s.deleteReseller)
 	s.route(mux, "GET /api/v1/accounts", rbac.AccountsRead, s.listAccounts)
 	s.route(mux, "POST /api/v1/accounts", rbac.AccountsWrite, s.createAccount)
 	s.route(mux, "GET /api/v1/accounts/{aid}", rbac.HostingRead, s.getAccount)
@@ -138,6 +144,13 @@ func (s *Server) routes(mux *http.ServeMux) {
 
 	// Billing integrations (WHMCS, Paymenter, generic).
 	s.billingRoutes(mux)
+
+	s.extraRoutes(mux)
+	s.ticketRoutes(mux)
+	s.installerRoutes(mux)
+	s.toolRoutes(mux)
+	s.terminalRoutes(mux)
+	s.metricsRoutes(mux)
 }
 
 // spa serves the built React app, falling back to index.html for client routes.

@@ -85,7 +85,10 @@ TasksMax=%d
 		fmt.Sprintf("CPUQuota=%d%%", a.Limits.CPUPercent),
 		fmt.Sprintf("MemoryMax=%dM", a.Limits.MemoryMB),
 		fmt.Sprintf("TasksMax=%d", a.Limits.MaxProcs))
-	return err
+	if err != nil {
+		return err
+	}
+	return p.SetDiskQuota(ctx, a)
 }
 
 // Suspend blocks the account's web serving and logins without deleting data.

@@ -9,8 +9,10 @@ import { Field, Input, Select } from "@/components/ui/Form";
 import { Badge, Card, EmptyState, ErrorNote, Loading, Mono, PageHeader, Table, Td, Th, Tr } from "@/components/ui/Layout";
 import { ConfirmDialog, Modal } from "@/components/ui/Modal";
 
-const runtimeLabel = { node: "Node.js", python: "Python", docker: "Docker" } as const;
-const empty = { name: "", runtime: "node", command: "server.js", image: "", domain_id: "" };
+const runtimeLabel = { node: "Node.js", python: "Python", ruby: "Ruby", docker: "Docker" } as const;
+const versions: Record<string, string[]> = { node: ["22", "20", "18"], python: ["3.13", "3.12", "3.11"], ruby: ["3.4", "3.3", "3.2"] };
+const defaults: Record<string, string> = { node: "server.js", python: "app.py", ruby: "bin/rails server -p $PORT" };
+const empty = { name: "", runtime: "node", version: "22", command: "server.js", image: "", domain_id: "" };
 
 export default function Apps() {
   const aid = useAccountId();
@@ -36,7 +38,7 @@ export default function Apps() {
     <>
       <PageHeader
         title="Applications"
-        description="Run Node.js, Python or container workloads inside your account's resource limits."
+        description="Run Node.js, Python, Ruby or container apps as managed services inside your account's resource limits."
         actions={
           <Button variant="primary" icon={Plus} onClick={() => setAdding(true)}>
             New application
@@ -114,13 +116,34 @@ export default function Apps() {
           </Field>
           <Field label="Runtime">
             {(id) => (
-              <Select id={id} value={f.runtime} onChange={(e) => setF({ ...f, runtime: e.target.value })}>
+              <Select
+                id={id}
+                value={f.runtime}
+                onChange={(e) => {
+                  const rt = e.target.value;
+                  setF({ ...f, runtime: rt, version: versions[rt]?.[0] ?? "", command: defaults[rt] ?? "" });
+                }}
+              >
                 <option value="node">Node.js</option>
-                <option value="python">Python 3</option>
+                <option value="python">Python</option>
+                <option value="ruby">Ruby (Rails, Sinatra, Rack)</option>
                 <option value="docker">Docker container</option>
               </Select>
             )}
           </Field>
+          {f.runtime !== "docker" && (
+            <Field label="Version">
+              {(id) => (
+                <Select id={id} value={f.version} onChange={(e) => setF({ ...f, version: e.target.value })}>
+                  {versions[f.runtime]?.map((v) => (
+                    <option key={v} value={v}>
+                      {runtimeLabel[f.runtime as keyof typeof runtimeLabel]} {v}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+          )}
           {f.runtime === "docker" ? (
             <Field label="Image" hint="For example nginx:1.27 or ghcr.io/you/app:latest">
               {(id) => <Input id={id} value={f.image} onChange={(e) => setF({ ...f, image: e.target.value })} className="font-mono" />}

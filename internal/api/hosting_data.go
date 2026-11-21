@@ -579,6 +579,7 @@ type appRow struct {
 	Runtime  string            `json:"runtime"`
 	Image    string            `json:"image,omitempty"`
 	Command  string            `json:"command,omitempty"`
+	Version  string            `json:"version,omitempty"`
 	Port     int               `json:"port"`
 	DomainID string            `json:"domain_id,omitempty"`
 	Env      map[string]string `json:"env,omitempty"`
@@ -625,7 +626,7 @@ func (s *Server) createApp(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	dir := path.Join(a.HomeDir, "apps", req.Name)
-	papp := provision.App{Name: req.Name, Runtime: req.Runtime, Command: req.Command, Dir: dir, Image: req.Image, Port: req.Port, Env: req.Env}
+	papp := provision.App{Name: req.Name, Runtime: req.Runtime, Version: req.Version, Command: req.Command, Dir: dir, Image: req.Image, Port: req.Port, Env: req.Env}
 	// Dry validation before touching anything.
 	if req.Runtime != "docker" {
 		if _, err := provision.RenderAppUnit(a.prov(), papp); err != nil {
@@ -633,8 +634,8 @@ func (s *Server) createApp(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	req.ID, req.Status = ids.New(), "running"
-	if _, err := s.db.Exec(r.Context(), `INSERT INTO apps (id, account_id, domain_id, name, runtime, image, port, env, status, created_at)
-		VALUES (?,?,NULLIF(?, ''),?,?,?,?,?,?,?)`, req.ID, a.ID, req.DomainID, req.Name, req.Runtime, req.Image, req.Port, "{}", req.Status, time.Now().Unix()); err != nil {
+	if _, err := s.db.Exec(r.Context(), `INSERT INTO apps (id, account_id, domain_id, name, runtime, image, port, env, status, runtime_version, command, created_at)
+		VALUES (?,?,NULLIF(?, ''),?,?,?,?,?,?,?,?,?)`, req.ID, a.ID, req.DomainID, req.Name, req.Runtime, req.Image, req.Port, "{}", req.Status, req.Version, req.Command, time.Now().Unix()); err != nil {
 		return err
 	}
 	if _, err := s.prov.Runner().Run(r.Context(), "install", "-d", "-m", "0750", "-o", a.SysUser, "-g", a.SysUser, dir); err != nil {

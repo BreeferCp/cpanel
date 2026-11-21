@@ -45,8 +45,8 @@ func (s *Server) byRef(r *http.Request) (*acct, error) {
 	q := acctSelect + ` WHERE a.external_ref = ?`
 	args := []any{ref}
 	if p.Role == rbac.Reseller {
-		q += ` AND u.owner_id = ?`
-		args = append(args, p.UserID)
+		q += ` AND (u.owner_id = ? OR o.owner_id = ?)`
+		args = append(args, p.UserID, p.UserID)
 	}
 	return scanAcct(s.db.QueryRow(r.Context(), q, args...))
 }
@@ -64,8 +64,8 @@ func (s *Server) billingCreate(w http.ResponseWriter, r *http.Request) error {
 	q := acctSelect + ` WHERE a.external_ref = ?`
 	args := []any{req.ExternalRef}
 	if p.Role == rbac.Reseller {
-		q += ` AND u.owner_id = ?`
-		args = append(args, p.UserID)
+		q += ` AND (u.owner_id = ? OR o.owner_id = ?)`
+		args = append(args, p.UserID, p.UserID)
 	}
 	if existing, err := scanAcct(s.db.QueryRow(r.Context(), q, args...)); err == nil {
 		writeJSON(w, 200, createdAccount{Account: existing})
@@ -283,11 +283,12 @@ func (s *Server) ssoRedeem(w http.ResponseWriter, r *http.Request) error {
 	if err := decode(r, &req); err != nil {
 		return err
 	}
-	if !s.loginLimit.allow("sso:" + s.clientIP(r)) {
+	if s.loginLimit.blocked("sso:" + s.clientIP(r)) {
 		return errTooMany()
 	}
 	uid, ok := s.verifySSO(req.Token)
 	if !ok {
+		s.loginLimit.fail("sso:" + s.clientIP(r))
 		return &apiError{401, "invalid_token", "this sign-in link is invalid or has expired"}
 	}
 	u, err := s.userByID(r.Context(), uid)

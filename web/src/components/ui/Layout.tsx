@@ -38,7 +38,7 @@ export function Card({
   flush?: boolean;
 }) {
   return (
-    <section className={clsx("rounded-lg border border-line bg-surface shadow-card", className)}>
+    <section className={clsx("min-w-0 rounded-lg border border-line bg-surface shadow-card", className)}>
       {(title || actions) && (
         <header className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
           <div className="min-w-0">
@@ -198,6 +198,28 @@ export function Tabs<T extends string>({
           )}
         >
           {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Compact single-choice control for filters such as a time range. */
+export function Segmented<T extends string>({ options, value, onChange, label }: { options: { id: T; label: string }[]; value: T; onChange: (v: T) => void; label: string }) {
+  return (
+    <div role="radiogroup" aria-label={label} className="inline-flex rounded-md border border-strong bg-surface p-0.5">
+      {options.map((o) => (
+        <button
+          key={o.id}
+          role="radio"
+          aria-checked={value === o.id}
+          onClick={() => onChange(o.id)}
+          className={clsx(
+            "whitespace-nowrap rounded px-2.5 py-1 text-[12.5px] font-medium transition-colors",
+            value === o.id ? "bg-accent-soft text-accent" : "text-muted hover:text-ink",
+          )}
+        >
+          {o.label}
         </button>
       ))}
     </div>

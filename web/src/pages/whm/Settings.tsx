@@ -36,9 +36,18 @@ export default function Settings() {
               {(id) => <Input id={id} value={f.server_ip ?? ""} onChange={set("server_ip")} className="font-mono" placeholder="203.0.113.10" />}
             </Field>
             <Field label="Hostname">{(id) => <Input id={id} value={f.hostname ?? ""} onChange={set("hostname")} placeholder="server.example.com" />}</Field>
-            <Field label="Nameserver 1">{(id) => <Input id={id} value={f.nameserver1 ?? ""} onChange={set("nameserver1")} placeholder="ns1.example.com" />}</Field>
-            <Field label="Nameserver 2">{(id) => <Input id={id} value={f.nameserver2 ?? ""} onChange={set("nameserver2")} placeholder="ns2.example.com" />}</Field>
           </div>
+        </Card>
+        <Card title="Nameservers" description="Used in every new DNS zone. When the parent domain is hosted here, glue A records are published automatically.">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Nameserver 1">{(id) => <Input id={id} value={f.nameserver1 ?? ""} onChange={set("nameserver1")} placeholder="ns1.example.com" />}</Field>
+            <Field label="Nameserver 1 IP">{(id) => <Input id={id} className="font-mono" value={f.nameserver1_ip ?? ""} onChange={set("nameserver1_ip")} placeholder="203.0.113.10" />}</Field>
+            <Field label="Nameserver 2">{(id) => <Input id={id} value={f.nameserver2 ?? ""} onChange={set("nameserver2")} placeholder="ns2.example.com" />}</Field>
+            <Field label="Nameserver 2 IP">{(id) => <Input id={id} className="font-mono" value={f.nameserver2_ip ?? ""} onChange={set("nameserver2_ip")} placeholder="203.0.113.11" />}</Field>
+          </div>
+        </Card>
+        <Card title="Web tools" description="Where phpMyAdmin and Roundcube webmail are served.">
+          <Field label="Tools URL" hint="Defaults to https://<hostname>:8443">{(id) => <Input id={id} value={f.tools_url ?? ""} onChange={set("tools_url")} placeholder="https://server.example.com:8443" />}</Field>
         </Card>
         <Card title="Contact">
           <div className="grid gap-4 sm:grid-cols-2">

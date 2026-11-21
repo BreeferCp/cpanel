@@ -1,4 +1,5 @@
-import { ArrowRight, KeyRound, Mail, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { ArrowRight, ExternalLink, KeyRound, Mail, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { useState } from "react";
 import { api } from "@/lib/api";
 import { formatMB } from "@/lib/format";
@@ -10,7 +11,7 @@ import { Field, Input, Select } from "@/components/ui/Form";
 import { Badge, Card, EmptyState, ErrorNote, Loading, Meter, PageHeader, Table, Tabs, Td, Th, Tr } from "@/components/ui/Layout";
 import { ConfirmDialog, Modal } from "@/components/ui/Modal";
 
-type Tab = "mailboxes" | "aliases" | "deliverability";
+type Tab = "mailboxes" | "aliases" | "deliverability" | "webmail";
 
 export default function Email() {
   const aid = useAccountId();
@@ -19,7 +20,9 @@ export default function Email() {
   const boxes = useGet<Mailbox[]>(mbKey);
   const aliases = useGet<MailAlias[]>(alKey);
   const domains = useGet<Domain[]>(`/accounts/${aid}/domains`);
-  const [tab, setTab] = useState<Tab>("mailboxes");
+  const [params] = useSearchParams();
+  const [tab, setTab] = useState<Tab>(params.get("tab") === "webmail" ? "webmail" : "mailboxes");
+  const tools = useGet<{ webmail: string }>("/tools");
 
   const [modal, setModal] = useState<"box" | "alias" | null>(null);
   const [f, setF] = useState({ local: "", domain: "", password: "", quota: "1024", dest: "" });
@@ -75,6 +78,7 @@ export default function Email() {
           { id: "mailboxes", label: "Mailboxes" },
           { id: "aliases", label: "Forwarders" },
           { id: "deliverability", label: "Deliverability" },
+          { id: "webmail", label: "Webmail & clients" },
         ]}
         value={tab}
         onChange={setTab}
@@ -157,6 +161,33 @@ export default function Email() {
             </Table>
           )}
         </Card>
+      )}
+
+      {tab === "webmail" && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card title="Webmail" description="Read and send mail in the browser with Roundcube.">
+            <a href={tools.data?.webmail} target="_blank" rel="noreferrer noopener">
+              <Button variant="primary" icon={ExternalLink}>
+                Open webmail
+              </Button>
+            </a>
+            <p className="mt-3 text-[12.5px] text-muted">Sign in with the full email address and the mailbox password.</p>
+          </Card>
+          <Card title="Mail client settings" description="For Outlook, Apple Mail, Thunderbird and phones.">
+            <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-[13px]">
+              <dt className="text-muted">Username</dt>
+              <dd>Your full email address</dd>
+              <dt className="text-muted">Incoming (IMAP)</dt>
+              <dd className="font-mono text-[12.5px]">mail.&lt;your-domain&gt; · 993 · SSL/TLS</dd>
+              <dt className="text-muted">Incoming (POP3)</dt>
+              <dd className="font-mono text-[12.5px]">mail.&lt;your-domain&gt; · 995 · SSL/TLS</dd>
+              <dt className="text-muted">Outgoing (SMTP)</dt>
+              <dd className="font-mono text-[12.5px]">mail.&lt;your-domain&gt; · 465 SSL or 587 STARTTLS</dd>
+              <dt className="text-muted">Authentication</dt>
+              <dd>Required for outgoing mail</dd>
+            </dl>
+          </Card>
+        </div>
       )}
 
       {tab === "deliverability" && (

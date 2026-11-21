@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"text/template"
 
 	"github.com/breefercp/breefercp/internal/system"
@@ -22,6 +24,53 @@ type Vhost struct {
 	Suspended  bool
 	// ProxyPort, when >0, proxies to a local app instead of serving files.
 	ProxyPort int
+	// Redirects are exact-path redirects served before anything else.
+	Redirects []Redirect
+	// ErrorPages lists statuses with a custom page in ErrorDir/<code>.html.
+	ErrorPages []int
+	ErrorDir   string
+}
+
+// Redirect sends requests for an exact path to an absolute URL.
+type Redirect struct {
+	Source string // "/old-page"
+	Target string // "https://example.com/new"
+	Code   int    // 301, 302, 307, 308
+}
+
+// ErrorCodes are the statuses a customer may customise.
+var ErrorCodes = []int{400, 401, 403, 404, 500, 502, 503}
+
+// Neither pattern admits ; $ quotes, braces or whitespace: nginx would treat
+// them as syntax or variable interpolation.
+var (
+	reRedirectPath = regexp.MustCompile(`^/[A-Za-z0-9._~!&+,=:@%/-]{0,512}$`)
+	reRedirectURL  = regexp.MustCompile(`^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?(/[A-Za-z0-9._~!&+,=:@%/?#-]*)?$`)
+)
+
+// ValidateRedirect rejects anything that could break out of a config line.
+func ValidateRedirect(r Redirect) error {
+	if !reRedirectPath.MatchString(r.Source) || strings.Contains(r.Source, "..") {
+		return fmt.Errorf("%w: source must be a path such as /old-page", system.ErrInvalid)
+	}
+	if !reRedirectURL.MatchString(r.Target) {
+		return fmt.Errorf("%w: target must be a full http(s) URL", system.ErrInvalid)
+	}
+	switch r.Code {
+	case 301, 302, 307, 308:
+	default:
+		return fmt.Errorf("%w: redirect code must be 301, 302, 307 or 308", system.ErrInvalid)
+	}
+	return nil
+}
+
+func validErrorCode(c int) bool {
+	for _, x := range ErrorCodes {
+		if x == c {
+			return true
+		}
+	}
+	return false
 }
 
 var vhostTmpl = template.Must(template.New("vhost").Parse(`# Managed by BreeferCP. Do not edit.
@@ -74,6 +123,15 @@ server {
     location ^~ /.well-known/acme-challenge/ { root {{.ACMERoot}}; }
     # Never serve dotfiles (.git, .env, .htpasswd) except ACME.
     location ~ /\.(?!well-known) { deny all; return 404; }
+{{- range .Redirects}}
+    location = {{.Source}} { return {{.Code}} {{.Target}}; }
+{{- end}}
+{{- if .ErrorPages}}
+{{- range .ErrorPages}}
+    error_page {{.}} /.breefer-errors/{{.}}.html;
+{{- end}}
+    location ^~ /.breefer-errors/ { alias {{.ErrorDir}}/; internal; }
+{{- end}}
 {{- if gt .ProxyPort 0}}
     location / {
         proxy_pass http://127.0.0.1:{{.ProxyPort}};
@@ -127,6 +185,19 @@ func RenderVhost(v Vhost, a Account, acmeRoot string) (string, error) {
 	if v.DocRoot == "" {
 		v.DocRoot = filepath.ToSlash(filepath.Join(a.Home, "public_html"))
 	}
+	for _, r := range v.Redirects {
+		if err := ValidateRedirect(r); err != nil {
+			return "", err
+		}
+	}
+	for _, c := range v.ErrorPages {
+		if !validErrorCode(c) {
+			return "", fmt.Errorf("%w: error code %d", system.ErrInvalid, c)
+		}
+	}
+	if len(v.ErrorPages) > 0 && v.ErrorDir == "" {
+		v.ErrorDir = ErrorDir(a, v.Domain)
+	}
 	view := vhostView{
 		Vhost:    v,
 		ACMERoot: acmeRoot,
@@ -142,6 +213,9 @@ func RenderVhost(v Vhost, a Account, acmeRoot string) (string, error) {
 
 // WriteVhost renders, validates with nginx -t and activates a vhost.
 func (p *Provisioner) WriteVhost(ctx context.Context, v Vhost, a Account) error {
+	if p.cfg.WebServer == "openlitespeed" {
+		return p.writeOLSVhost(ctx, v, a)
+	}
 	conf, err := RenderVhost(v, a, "/var/lib/breefercp/acme-webroot")
 	if err != nil {
 		return err
@@ -163,11 +237,18 @@ func (p *Provisioner) RemoveVhost(ctx context.Context, domain string) error {
 	if err := system.Domain(domain); err != nil {
 		return err
 	}
+	if p.cfg.WebServer == "openlitespeed" {
+		return p.removeOLSVhost(ctx, domain)
+	}
 	return p.run.Remove(filepath.Join(p.cfg.NginxConfDir, domain+".conf"))
 }
 
 // ReloadWeb gracefully reloads nginx.
 func (p *Provisioner) ReloadWeb(ctx context.Context) error {
+	if p.cfg.WebServer == "openlitespeed" {
+		_, err := p.run.Run(ctx, olsCtl, "restart")
+		return err
+	}
 	_, err := p.run.Run(ctx, "systemctl", "reload", "nginx")
 	return err
 }
@@ -201,11 +282,18 @@ php_admin_value[disable_functions] = exec,passthru,shell_exec,system,proc_open,p
 php_admin_value[memory_limit] = {{.MemoryLimit}}M
 php_admin_value[post_max_size] = 256M
 php_admin_value[upload_max_filesize] = 256M
+{{- range $k, $v := .Ini}}
+php_value[{{$k}}] = {{$v}}
+{{- end}}
 `))
 
 // ApplyPHPPool writes the per-account FPM pool and reloads FPM.
 func (p *Provisioner) ApplyPHPPool(ctx context.Context, a Account) error {
 	if err := system.PHPVersion(a.PHP); err != nil {
+		return err
+	}
+	ini, err := CleanPHPIni(a.PHPIni)
+	if err != nil {
 		return err
 	}
 	mem := a.Limits.MemoryMB / 4
@@ -219,7 +307,7 @@ func (p *Provisioner) ApplyPHPPool(ctx context.Context, a Account) error {
 	var b bytes.Buffer
 	if err := poolTmpl.Execute(&b, map[string]any{
 		"User": a.SysUser, "Socket": fpmSocket(a.SysUser, a.PHP), "Home": filepath.ToSlash(a.Home),
-		"MaxChildren": children, "MemoryLimit": mem, "WebUser": p.cfg.WebUser,
+		"MaxChildren": children, "MemoryLimit": mem, "WebUser": p.cfg.WebUser, "Ini": ini,
 	}); err != nil {
 		return err
 	}
@@ -227,7 +315,7 @@ func (p *Provisioner) ApplyPHPPool(ctx context.Context, a Account) error {
 	if err := p.run.WriteFile(path, b.Bytes(), 0o644); err != nil {
 		return err
 	}
-	_, err := p.run.Run(ctx, "systemctl", "reload", "php"+a.PHP+"-fpm")
+	_, err = p.run.Run(ctx, "systemctl", "reload", "php"+a.PHP+"-fpm")
 	return err
 }
 
@@ -239,4 +327,9 @@ func (p *Provisioner) StopPHPPool(ctx context.Context, a Account) error {
 	}
 	_, err := p.run.Run(ctx, "systemctl", "reload", "php"+a.PHP+"-fpm")
 	return err
+}
+
+// ErrorDir is where a domain's custom error pages live inside the account.
+func ErrorDir(a Account, domain string) string {
+	return filepath.ToSlash(filepath.Join(a.Home, "error_pages", domain))
 }

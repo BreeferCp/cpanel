@@ -75,12 +75,16 @@ type userView struct {
 	Locale      string    `json:"locale"`
 	Theme       string    `json:"theme"`
 	AccountID   string    `json:"account_id,omitempty"`
+	IsMaster    bool      `json:"is_master"`
 }
 
 func (s *Server) view(ctx context.Context, u *userRow) userView {
 	v := userView{ID: u.ID, Username: u.Username, Email: u.Email, Role: u.Role,
 		TOTPEnabled: u.TOTPEnabled, Locale: u.Locale, Theme: u.Theme}
 	_ = s.db.QueryRow(ctx, `SELECT id FROM accounts WHERE user_id = ?`, u.ID).Scan(&v.AccountID)
+	var master int
+	_ = s.db.QueryRow(ctx, `SELECT is_master FROM users WHERE id = ?`, u.ID).Scan(&master)
+	v.IsMaster = master == 1
 	return v
 }
 
@@ -96,13 +100,20 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 	}
 	ip := s.clientIP(r)
 	req.Username = strings.ToLower(strings.TrimSpace(req.Username))
-	if !s.loginLimit.allow("ip:"+ip) || !s.loginLimit.allow("user:"+req.Username) {
+	// Only failures count, so many legitimate sign-ins from one office IP
+	// never trip the limiter.
+	if s.loginLimit.blocked("ip:"+ip) || s.loginLimit.blocked("user:"+req.Username) {
 		return errTooMany()
+	}
+	failedAttempt := func() {
+		s.loginLimit.fail("ip:" + ip)
+		s.loginLimit.fail("user:" + req.Username)
 	}
 	invalid := &apiError{401, "invalid_credentials", "invalid username or password"}
 	u, err := s.userByUsername(r.Context(), req.Username)
 	if err != nil {
 		auth.DummyVerify(req.Password) // equalise timing with the found-user path
+		failedAttempt()
 		s.auditAs(r.Context(), "", req.Username, ip, "auth.login", "", false, "unknown user")
 		return invalid
 	}
@@ -118,6 +129,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 			lock, failed = now+int64(lockDuration.Seconds()), 0
 		}
 		_, _ = s.db.Exec(r.Context(), `UPDATE users SET failed_logins = ?, locked_until = ? WHERE id = ?`, failed, lock, u.ID)
+		failedAttempt()
 		s.auditAs(r.Context(), u.ID, u.Username, ip, "auth.login", "", false, "bad password")
 		return invalid
 	}
@@ -148,7 +160,7 @@ func (s *Server) login2FA(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	ip := s.clientIP(r)
-	if !s.loginLimit.allow("2fa:" + ip) {
+	if s.loginLimit.blocked("2fa:" + ip) {
 		return errTooMany()
 	}
 	id := auth.HashToken(req.Challenge)
@@ -173,6 +185,7 @@ func (s *Server) login2FA(w http.ResponseWriter, r *http.Request) error {
 		ok = true
 	}
 	if !ok {
+		s.loginLimit.fail("2fa:" + ip)
 		s.auditAs(r.Context(), u.ID, u.Username, ip, "auth.2fa", "", false, "bad code")
 		return &apiError{401, "invalid_code", "invalid verification code"}
 	}

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -216,72 +217,7 @@ func (s *Server) deletePackage(w http.ResponseWriter, r *http.Request) error {
 }
 
 func limitsOf(p pkg) provision.Limits {
-	return provision.Limits{CPUPercent: p.CPUPercent, MemoryMB: p.MemoryMB, IOWeight: p.IOWeight, MaxProcs: p.MaxProcs}
-}
-
-// ---- resellers --------------------------------------------------------------
-
-func (s *Server) listResellers(w http.ResponseWriter, r *http.Request) error {
-	rows, err := s.db.Query(r.Context(), `SELECT u.id, u.username, u.email, u.suspended,
-		(SELECT COUNT(*) FROM users c WHERE c.owner_id = u.id) FROM users u WHERE u.role = 'reseller' ORDER BY u.username`)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	type rv struct {
-		ID        string `json:"id"`
-		Username  string `json:"username"`
-		Email     string `json:"email"`
-		Suspended bool   `json:"suspended"`
-		Customers int    `json:"customers"`
-	}
-	out := []rv{}
-	for rows.Next() {
-		var v rv
-		var susp int
-		if err := rows.Scan(&v.ID, &v.Username, &v.Email, &susp, &v.Customers); err != nil {
-			return err
-		}
-		v.Suspended = susp == 1
-		out = append(out, v)
-	}
-	writeJSON(w, 200, out)
-	return rows.Err()
-}
-
-func (s *Server) createReseller(w http.ResponseWriter, r *http.Request) error {
-	var req struct {
-		Username string `json:"username"`
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}
-	if err := decode(r, &req); err != nil {
-		return err
-	}
-	req.Username = strings.ToLower(strings.TrimSpace(req.Username))
-	if err := system.SysUser(req.Username); err != nil {
-		return err
-	}
-	if !strings.Contains(req.Email, "@") {
-		return errBadRequest("enter a valid email address")
-	}
-	if err := auth.CheckPasswordPolicy(req.Password); err != nil {
-		return errBadRequest(err.Error())
-	}
-	hash, err := auth.HashPassword(req.Password)
-	if err != nil {
-		return err
-	}
-	p := principalFrom(r.Context())
-	id := ids.New()
-	now := time.Now().Unix()
-	if _, err := s.db.Exec(r.Context(), `INSERT INTO users (id, username, email, password_hash, role, owner_id, created_at, updated_at)
-		VALUES (?,?,?,?,'reseller',?,?,?)`, id, req.Username, req.Email, hash, p.UserID, now, now); err != nil {
-		return err
-	}
-	s.audit(r, "reseller.create", req.Username, true, "")
-	writeJSON(w, 201, map[string]string{"id": id, "username": req.Username})
-	return nil
+	return provision.Limits{CPUPercent: p.CPUPercent, MemoryMB: p.MemoryMB, IOWeight: p.IOWeight, MaxProcs: p.MaxProcs, DiskMB: p.DiskMB}
 }
 
 // ---- accounts ---------------------------------------------------------------
@@ -303,29 +239,38 @@ type acct struct {
 	DiskUsedMB    int    `json:"disk_used_mb"`
 	BWUsedMB      int    `json:"bw_used_mb"`
 	OwnerID       string `json:"owner_id"`
+	OwnerName     string `json:"owner_name"`
+	Shell         string `json:"shell"`
 	CreatedAt     int64  `json:"created_at"`
+	grandOwnerID  string
+	phpIniJSON    string
 	pkg           pkg
 }
 
 const acctSelect = `SELECT a.id, a.user_id, u.username, u.email, a.package_id, k.name, a.sys_user, a.sys_uid, a.home_dir,
 	a.primary_domain, a.status, a.suspend_reason, a.external_ref, a.disk_used_mb, a.bw_used_mb, COALESCE(u.owner_id,''), a.created_at,
-	k.cpu_percent, k.memory_mb, k.io_weight, k.max_procs, k.php_versions, k.disk_mb, k.max_domains, k.max_databases, k.max_mailboxes, k.max_cron, k.max_apps, k.shell_access
-	FROM accounts a JOIN users u ON u.id = a.user_id JOIN packages k ON k.id = a.package_id`
+	COALESCE(o.owner_id,''), COALESCE(o.username,''), a.shell,
+	k.cpu_percent, k.memory_mb, k.io_weight, k.max_procs, k.php_versions, k.disk_mb, k.max_domains, k.max_databases, k.max_mailboxes, k.max_cron, k.max_apps, k.shell_access,
+	COALESCE((SELECT ps.settings FROM php_settings ps WHERE ps.account_id = a.id), '{}')
+	FROM accounts a JOIN users u ON u.id = a.user_id JOIN packages k ON k.id = a.package_id LEFT JOIN users o ON o.id = u.owner_id`
 
 func scanAcct(row rowScanner) (*acct, error) {
 	var a acct
 	var shell int
 	err := row.Scan(&a.ID, &a.UserID, &a.Username, &a.Email, &a.PackageID, &a.PackageName, &a.SysUser, &a.SysUID, &a.HomeDir,
 		&a.PrimaryDomain, &a.Status, &a.SuspendReason, &a.ExternalRef, &a.DiskUsedMB, &a.BWUsedMB, &a.OwnerID, &a.CreatedAt,
+		&a.grandOwnerID, &a.OwnerName, &a.Shell,
 		&a.pkg.CPUPercent, &a.pkg.MemoryMB, &a.pkg.IOWeight, &a.pkg.MaxProcs, &a.pkg.PHPVersions, &a.pkg.DiskMB,
-		&a.pkg.MaxDomains, &a.pkg.MaxDatabases, &a.pkg.MaxMailboxes, &a.pkg.MaxCron, &a.pkg.MaxApps, &shell)
+		&a.pkg.MaxDomains, &a.pkg.MaxDatabases, &a.pkg.MaxMailboxes, &a.pkg.MaxCron, &a.pkg.MaxApps, &shell, &a.phpIniJSON)
 	a.pkg.ShellAccess = shell == 1
 	return &a, store.IsNoRows(err)
 }
 
 func (a *acct) prov() provision.Account {
 	php := strings.Split(a.pkg.PHPVersions, ",")[0]
-	return provision.Account{SysUser: a.SysUser, UID: a.SysUID, Home: a.HomeDir, PHP: strings.TrimSpace(php), Limits: limitsOf(a.pkg)}
+	var ini map[string]string
+	_ = json.Unmarshal([]byte(a.phpIniJSON), &ini)
+	return provision.Account{SysUser: a.SysUser, UID: a.SysUID, Home: a.HomeDir, PHP: strings.TrimSpace(php), Limits: limitsOf(a.pkg), PHPIni: ini}
 }
 
 // loadAccount resolves {aid} ("me" allowed) and enforces tenancy:
@@ -348,7 +293,8 @@ func (s *Server) loadAccount(r *http.Request) (*acct, error) {
 	switch p.Role {
 	case rbac.Root:
 	case rbac.Reseller:
-		if a.OwnerID != p.UserID && a.UserID != p.UserID {
+		// Owned directly, or through one of this master reseller's resellers.
+		if a.OwnerID != p.UserID && a.grandOwnerID != p.UserID && a.UserID != p.UserID {
 			return nil, store.ErrNotFound // do not reveal existence across tenants
 		}
 	default:
@@ -364,8 +310,8 @@ func (s *Server) listAccounts(w http.ResponseWriter, r *http.Request) error {
 	q := acctSelect
 	var args []any
 	if p.Role == rbac.Reseller {
-		q += ` WHERE u.owner_id = ?`
-		args = append(args, p.UserID)
+		q += ` WHERE (u.owner_id = ? OR o.owner_id = ?)`
+		args = append(args, p.UserID, p.UserID)
 	}
 	if search := strings.TrimSpace(r.URL.Query().Get("q")); search != "" {
 		if len(args) == 0 {
@@ -452,6 +398,9 @@ func (s *Server) provisionAccount(ctx context.Context, owner *Principal, req Cre
 	if err != nil {
 		return nil, errBadRequest("unknown package")
 	}
+	if err := s.checkResellerAllocation(ctx, owner, pk.DiskMB, true); err != nil {
+		return nil, err
+	}
 	generated := ""
 	if req.Password == "" {
 		if generated, err = auth.RandomPassword(20); err != nil {
@@ -517,7 +466,7 @@ func (s *Server) applyNewAccount(ctx context.Context, pa provision.Account, doma
 	if err := s.prov.WriteVhost(ctx, provision.Vhost{Domain: domain, Aliases: []string{"www." + domain}}, pa); err != nil {
 		return err
 	}
-	return s.prov.DNS().CreateZone(ctx, domain, s.serverIP(ctx), nil)
+	return s.prov.DNS().CreateZone(ctx, domain, s.serverIP(ctx), s.nameservers(ctx))
 }
 
 func mustRandom() string {
@@ -548,6 +497,9 @@ func (s *Server) updateAccount(w http.ResponseWriter, r *http.Request) error {
 		pk, err := s.ownedPackage(r.Context(), p, *req.PackageID)
 		if err != nil {
 			return errBadRequest("unknown package")
+		}
+		if err := s.checkResellerAllocation(r.Context(), p, pk.DiskMB-a.pkg.DiskMB, false); err != nil && pk.DiskMB > a.pkg.DiskMB {
+			return err
 		}
 		if _, err := s.db.Exec(r.Context(), `UPDATE accounts SET package_id=?, updated_at=? WHERE id=?`, pk.ID, time.Now().Unix(), a.ID); err != nil {
 			return err

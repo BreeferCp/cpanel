@@ -65,3 +65,35 @@ Server IP (used in new DNS zones), hostname, nameservers, contact and Let's Encr
 - Turn on two-factor authentication under **Profile & Security** and store the recovery codes offline.
 - Review **Sessions** and sign out devices you do not recognise.
 - Create **API tokens** with the narrowest scope and an IP allow-list.
+
+## Dashboard and metrics
+
+The overview charts CPU, memory, load and network traffic for the last 1, 6 or 24 hours (sampled every 30 seconds), and lists the accounts using the most CPU over the last hour. Every chart has a **View as table** link. Per-account CPU, memory and process counts are read from each account's cgroup every 5 minutes and kept for 7 days; customers see their own on their home page.
+
+## Master resellers and reseller limits
+
+Hierarchy: root → master reseller → reseller → customers. A master reseller can also own customers directly.
+
+| Limit | Effect |
+|---|---|
+| Max accounts | Account creation fails with *limit reached* once the reseller owns this many |
+| Disk to allocate | The sum of the disk limits of the reseller's accounts' packages may not exceed this; such resellers must use packages with a disk limit |
+| Max sub-resellers | Master resellers only: how many resellers they may create |
+
+Only root can make a reseller a master. Suspending a reseller signs it out and revokes its API tokens; its customers keep running. A reseller can only be deleted once it has no accounts or sub-resellers.
+
+## Shell access
+
+Set per account under **Accounts → ⋯ → Modify account**:
+
+- **Disabled:** no SSH login (`/usr/sbin/nologin`).
+- **SFTP only:** the user joins `breefer-sftp`; sshd forces `internal-sftp`, so no shell, TTY or tunnels.
+- **Full shell:** `/bin/bash` over SSH and the browser **Terminal**, both inside the account's cgroup limits. Only available when the account's package allows shell access.
+
+## Nameservers
+
+Under **Settings → Nameservers** set `ns1`/`ns2` host names and IPs. New DNS zones use them as NS records, and if the parent domain (for example `example.com` for `ns1.example.com`) is hosted on this server, the glue A records are published automatically.
+
+## Support tickets
+
+Customers' tickets go to whoever owns the customer (their reseller, or root). Replying marks a ticket *Answered*; a customer reply marks it *Customer reply*. Resellers can open tickets with their own provider from the same page.

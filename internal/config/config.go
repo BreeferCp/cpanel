@@ -49,7 +49,9 @@ type Config struct {
 	HomeBase       string // base dir for account homes, e.g. /home
 	NginxConfDir   string
 	// WebUser is the account nginx and PHP-FPM sockets run as (www-data on Debian/Ubuntu).
-	WebUser       string
+	WebUser string
+	// WebServer is "nginx" (default) or "openlitespeed".
+	WebServer     string
 	PHPFPMPoolDir string
 
 	// TrustedProxies lists CIDRs from which X-Forwarded-For is honoured.
@@ -69,6 +71,7 @@ func Default() Config {
 		HomeBase:      "/home",
 		NginxConfDir:  "/etc/nginx/breefercp.d",
 		WebUser:       "www-data",
+		WebServer:     "nginx",
 		PHPFPMPoolDir: "/etc/php",
 	}
 }
@@ -163,6 +166,8 @@ func set(c *Config, k, v string) error {
 		c.HomeBase = v
 	case "nginx_conf_dir":
 		c.NginxConfDir = v
+	case "web_server":
+		c.WebServer = v
 	case "web_user":
 		c.WebUser = v
 	case "phpfpm_pool_dir":
@@ -184,6 +189,9 @@ func (c Config) Validate() error {
 	}
 	if c.DBDSN == "" {
 		return errors.New("db_dsn is required")
+	}
+	if c.WebServer != "nginx" && c.WebServer != "openlitespeed" {
+		return fmt.Errorf("web_server must be nginx or openlitespeed, got %q", c.WebServer)
 	}
 	if (c.TLSCert == "") != (c.TLSKey == "") {
 		return errors.New("tls_cert and tls_key must be set together")

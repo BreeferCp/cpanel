@@ -7,7 +7,8 @@
 - A **dedicated** server or VM with a fresh install of Debian 12+ or Ubuntu 22.04+ (root access, systemd, cgroups v2).
 - 2 GB RAM minimum, 4 GB recommended; 20 GB disk plus space for customer data.
 - A public IPv4 address and a hostname for the panel (for example `panel.example.com`) with an A record pointing at it.
-- Ports open to the internet: 22, 25, 53 (TCP and UDP), 80, 143, 443, 465, 587, 993, 2087.
+- Ports open to the internet: 22, 25, 53 (TCP and UDP), 80, 143, 443, 465, 587, 993, 995, 2087 (panel) and 8443 (phpMyAdmin and webmail).
+- For disk quotas, mount `/home` with `usrquota` and run `quotacheck -cum /home && quotaon /home`. Without it, usage is still tracked and shown, but not enforced by the filesystem.
 
 The installer takes over nginx, Postfix, Dovecot, PowerDNS and nftables. Do not run it on a server that already hosts sites you care about.
 
@@ -26,7 +27,7 @@ cd breefercp-<version>-linux-amd64
 sudo ./deploy/install.sh --email you@example.com --hostname panel.example.com
 ```
 
-It installs and configures nginx, PHP-FPM, MariaDB, Postfix, Dovecot, OpenDKIM, PowerDNS, nftables, fail2ban and Docker, installs `breeferd` as a systemd service, generates all service passwords, and creates the first administrator. The administrator password is printed **once** at the end.
+It installs and configures nginx, PHP-FPM, MariaDB, Postfix, Dovecot, OpenDKIM, PowerDNS, nftables, fail2ban, Docker, phpMyAdmin (with panel single sign-on), Roundcube, WP-CLI and Composer, sets up SFTP-only SSH access, installs `breeferd` as a systemd service, generates all service passwords, and creates the first administrator. The administrator password is printed **once** at the end.
 
 Options: `--admin-user NAME` (default `admin`), `--skip-docker`.
 
@@ -56,6 +57,7 @@ The daemon reads `/etc/breefercp/breefercp.conf`. Every key can be overridden wi
 | `mariadb_dsn` | Admin connection used to create customer databases |
 | `powerdns_url` / `powerdns_api_key` | PowerDNS HTTP API |
 | `web_user` | User nginx and PHP-FPM run as (`www-data` on Debian/Ubuntu) |
+| `web_server` | `nginx` (default) or `openlitespeed` (experimental; install OpenLiteSpeed and lsphp first) |
 | `trusted_proxies` | CIDRs whose `X-Forwarded-For` header is trusted |
 | `dry_run` | Log host commands instead of running them (development) |
 

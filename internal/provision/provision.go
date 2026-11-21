@@ -41,6 +41,8 @@ type Limits struct {
 	MemoryMB   int
 	IOWeight   int // 1-10000, default 100
 	MaxProcs   int
+	// DiskMB is the filesystem quota (0 = unlimited).
+	DiskMB int
 }
 
 // Account is the minimal view of a hosting account the provisioner needs.
@@ -50,4 +52,6 @@ type Account struct {
 	Home    string
 	Limits  Limits
 	PHP     string
+	// PHPIni holds customer php.ini overrides (validated by CleanPHPIni).
+	PHPIni map[string]string
 }

@@ -51,7 +51,7 @@ var matrix = map[Role]map[Permission]bool{
 		HostingRead, HostingWrite, FilesRead, FilesWrite, ProfileWrite, TokensWrite,
 	),
 	Reseller: all(
-		AccountsRead, AccountsWrite, PackagesRead, PackagesWrite, BillingWrite,
+		AccountsRead, AccountsWrite, PackagesRead, PackagesWrite, BillingWrite, ResellersWrite,
 		HostingRead, HostingWrite, FilesRead, FilesWrite, ProfileWrite, TokensWrite,
 	),
 	User: all(HostingRead, HostingWrite, FilesRead, FilesWrite, ProfileWrite, TokensWrite),

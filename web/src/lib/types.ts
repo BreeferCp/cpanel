@@ -9,6 +9,7 @@ export interface User {
   locale: string;
   theme: "light" | "dark" | "system";
   account_id?: string;
+  is_master: boolean;
 }
 
 export interface Pkg {
@@ -44,6 +45,9 @@ export interface Account {
   external_ref: string;
   disk_used_mb: number;
   bw_used_mb: number;
+  owner_id: string;
+  owner_name: string;
+  shell: "none" | "sftp" | "full";
   created_at: number;
 }
 
@@ -117,7 +121,8 @@ export interface SshKey {
 export interface App {
   id: string;
   name: string;
-  runtime: "node" | "python" | "docker";
+  runtime: "node" | "python" | "ruby" | "docker";
+  version?: string;
   image?: string;
   port: number;
   status: string;
@@ -223,4 +228,141 @@ export interface SessionInfo {
   created_at: number;
   last_seen: number;
   current: boolean;
+}
+
+export interface HostSample {
+  t: number;
+  cpu: number;
+  mem: number;
+  load: number;
+  disk: number;
+  rx: number;
+  tx: number;
+}
+
+export interface AccountSample {
+  t: number;
+  cpu: number;
+  mem_mb: number;
+  procs: number;
+}
+
+export interface TopAccount {
+  id: string;
+  domain: string;
+  user: string;
+  cpu: number;
+  mem_mb: number;
+  disk_used_mb: number;
+  disk_limit_mb: number;
+}
+
+export interface ResellerFull {
+  id: string;
+  username: string;
+  email: string;
+  owner_id: string;
+  owner_name: string;
+  is_master: boolean;
+  suspended: boolean;
+  max_accounts: number;
+  max_disk_mb: number;
+  max_resellers: number;
+  accounts: number;
+  resellers: number;
+  disk_allocated_mb: number;
+  disk_used_mb: number;
+  created_at: number;
+}
+
+export interface Ticket {
+  id: string;
+  number: number;
+  subject: string;
+  department: string;
+  priority: "low" | "normal" | "high" | "urgent";
+  status: "open" | "answered" | "customer_reply" | "closed";
+  user_id: string;
+  customer: string;
+  mine: boolean;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface TicketMessage {
+  id: string;
+  author: string;
+  staff: boolean;
+  body: string;
+  created_at: number;
+}
+
+export interface CatalogApp {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  website: string;
+  needs_db: boolean;
+  method: "wpcli" | "archive" | "composer";
+  webroot?: string;
+}
+
+export interface Installation {
+  id: string;
+  app: string;
+  app_name: string;
+  domain_id: string;
+  domain: string;
+  path: string;
+  url: string;
+  version: string;
+  db_name: string;
+  admin_user: string;
+  status: "installing" | "installed" | "failed";
+  created_at: number;
+}
+
+export interface WPItem {
+  name: string;
+  title?: string;
+  status: string;
+  update: string;
+  version: string;
+}
+
+export interface WPInfo {
+  version: string;
+  update_version?: string;
+  plugins: WPItem[];
+  themes: WPItem[];
+  maintenance: boolean;
+}
+
+export interface PHPInfo {
+  versions: { version: string; installed: boolean; allowed: boolean }[];
+  default_version: string;
+  ini: Record<string, string> | null;
+  defaults: Record<string, string>;
+  keys: string[];
+}
+
+export interface RedirectRule {
+  id: string;
+  source: string;
+  target: string;
+  code: number;
+}
+
+export interface ErrorPage {
+  code: number;
+  custom: boolean;
+  content: string;
+}
+
+export interface DiskUsage {
+  directories: { path: string; size_mb: number }[];
+  databases_mb: number;
+  limit_mb: number;
+  used_mb: number;
 }

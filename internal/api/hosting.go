@@ -190,6 +190,16 @@ func (s *Server) vhostFor(ctx context.Context, d domain) (provision.Vhost, error
 	if err != nil && store.IsNoRows(err) != store.ErrNotFound {
 		return v, err
 	}
+	if v.Redirects, err = s.redirectsOf(ctx, d.ID); err != nil {
+		return v, err
+	}
+	var pages string
+	if err := s.db.QueryRow(ctx, `SELECT error_pages FROM domains WHERE id = ?`, d.ID).Scan(&pages); err != nil {
+		return v, err
+	}
+	v.ErrorPages = parseCodes(pages)
+	// An app attached to this domain keeps it proxied across rewrites.
+	_ = s.db.QueryRow(ctx, `SELECT port FROM apps WHERE domain_id = ? ORDER BY created_at LIMIT 1`, d.ID).Scan(&v.ProxyPort)
 	return v, nil
 }
 
@@ -271,7 +281,7 @@ func (s *Server) addDomain(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	if req.Kind == "addon" {
-		if err := s.prov.DNS().CreateZone(r.Context(), d.Name, s.serverIP(r.Context()), nil); err != nil {
+		if err := s.prov.DNS().CreateZone(r.Context(), d.Name, s.serverIP(r.Context()), s.nameservers(r.Context())); err != nil {
 			s.log.Warn("dns zone create failed", "domain", d.Name, "err", err)
 		}
 	}

@@ -3,6 +3,13 @@ import {
   Activity,
   AppWindow,
   Archive,
+  Boxes,
+  Code2,
+  FileWarning,
+  HardDrive,
+  LifeBuoy,
+  Repeat,
+  SquareTerminal,
   ChevronLeft,
   Clock,
   Database,
@@ -53,33 +60,51 @@ const hostingNav = (base: string): NavGroup[] => [
     items: [{ to: base, label: "Overview", icon: LayoutDashboard, end: true }],
   },
   {
-    title: "Websites",
+    title: "Files",
     items: [
-      { to: `${base}/domains`, label: "Domains", icon: Globe },
       { to: `${base}/files`, label: "File Manager", icon: FolderOpen },
-      { to: `${base}/ssl`, label: "SSL/TLS", icon: ShieldCheck },
-      { to: `${base}/apps`, label: "Applications", icon: AppWindow },
+      { to: `${base}/disk`, label: "Disk Usage", icon: HardDrive },
+      { to: `${base}/backups`, label: "Backups", icon: Archive },
     ],
   },
   {
-    title: "Data & Mail",
+    title: "Domains",
     items: [
-      { to: `${base}/databases`, label: "Databases", icon: Database },
-      { to: `${base}/email`, label: "Email", icon: Mail },
+      { to: `${base}/domains`, label: "Domains", icon: Globe },
+      { to: `${base}/redirects`, label: "Redirects", icon: Repeat },
       { to: `${base}/dns`, label: "DNS Zone Editor", icon: Network },
+      { to: `${base}/ssl`, label: "SSL/TLS", icon: ShieldCheck },
+      { to: `${base}/error-pages`, label: "Error Pages", icon: FileWarning },
+    ],
+  },
+  {
+    title: "Email & Databases",
+    items: [
+      { to: `${base}/email`, label: "Email", icon: Mail },
+      { to: `${base}/databases`, label: "Databases", icon: Database },
+    ],
+  },
+  {
+    title: "Software",
+    items: [
+      { to: `${base}/installer`, label: "App Installer", icon: Package },
+      { to: `${base}/wordpress`, label: "WordPress", icon: AppWindow },
+      { to: `${base}/php`, label: "PHP Manager", icon: Code2 },
+      { to: `${base}/apps`, label: "Node / Python / Ruby", icon: Boxes },
     ],
   },
   {
     title: "Advanced",
     items: [
-      { to: `${base}/cron`, label: "Cron Jobs", icon: Clock },
+      { to: `${base}/terminal`, label: "Terminal", icon: SquareTerminal },
       { to: `${base}/ssh`, label: "SSH Access", icon: Terminal },
-      { to: `${base}/backups`, label: "Backups", icon: Archive },
+      { to: `${base}/cron`, label: "Cron Jobs", icon: Clock },
+      { to: `${base}/logs`, label: "Logs", icon: ScrollText },
     ],
   },
 ];
 
-const adminNav = (isRoot: boolean): NavGroup[] => [
+const adminNav = (isRoot: boolean, isMaster: boolean): NavGroup[] => [
   {
     title: "Server",
     items: [
@@ -93,7 +118,8 @@ const adminNav = (isRoot: boolean): NavGroup[] => [
     items: [
       { to: "/accounts", label: "Accounts", icon: Users },
       { to: "/packages", label: "Packages", icon: Package },
-      ...(isRoot ? [{ to: "/resellers", label: "Resellers", icon: UsersRound }] : []),
+      ...(isRoot || isMaster ? [{ to: "/resellers", label: "Resellers", icon: UsersRound }] : []),
+      { to: "/tickets", label: "Support Tickets", icon: LifeBuoy },
     ],
   },
   ...(isRoot
@@ -170,7 +196,7 @@ export function Shell() {
   const groups: NavGroup[] = aid
     ? hostingNav(`/accounts/${aid}`)
     : isAdmin
-      ? adminNav(user?.role === "root")
+      ? adminNav(user?.role === "root", !!user?.is_master)
       : hostingNav("/hosting");
   const close = () => setOpen(false);
 
@@ -199,7 +225,13 @@ export function Shell() {
           ))}
           {!aid && (
             <NavSection
-              group={{ title: "Account", items: [{ to: "/profile", label: "Profile & Security", icon: KeyRound }] }}
+              group={{
+                title: "Account",
+                items: [
+                  ...(isAdmin ? [] : [{ to: "/tickets", label: "Support", icon: LifeBuoy }]),
+                  { to: "/profile", label: "Profile & Security", icon: KeyRound },
+                ],
+              }}
               onNavigate={close}
             />
           )}

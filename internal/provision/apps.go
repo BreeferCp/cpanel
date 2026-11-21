@@ -15,7 +15,10 @@ import (
 // App is a long-running Node.js / Python / container workload.
 type App struct {
 	Name    string
-	Runtime string // node | python | docker
+	Runtime string // node | python | ruby | docker
+	// Version selects a runtime under /opt/breefercp/runtimes (e.g. node 22,
+	// python 3.12, ruby 3.3). Empty means the system default.
+	Version string
 	Command string // start command for node/python (relative to Dir)
 	Dir     string
 	Image   string // docker image
@@ -25,6 +28,15 @@ type App struct {
 
 var reAppName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,30}$`)
 var reEnvKey = regexp.MustCompile(`^[A-Z_][A-Z0-9_]{0,63}$`)
+var reVersion = regexp.MustCompile(`^[0-9]{1,2}(\.[0-9]{1,2})?$`)
+
+// Runtimes lists supported app runtimes and the versions offered.
+var Runtimes = map[string][]string{
+	"node":   {"22", "20", "18"},
+	"python": {"3.13", "3.12", "3.11"},
+	"ruby":   {"3.4", "3.3", "3.2"},
+}
+
 var reImage = regexp.MustCompile(`^[a-z0-9][a-z0-9._/-]{0,127}(:[A-Za-z0-9._-]{1,64})?$`)
 
 var appUnit = template.Must(template.New("unit").Parse(`# Managed by BreeferCP. Do not edit.
@@ -76,12 +88,24 @@ func RenderAppUnit(a Account, app App) (string, error) {
 	if err := system.OneLine(app.Command, 512); err != nil {
 		return "", err
 	}
+	if app.Version != "" && !reVersion.MatchString(app.Version) {
+		return "", fmt.Errorf("%w: runtime version", system.ErrInvalid)
+	}
+	bin := func(def, name string) string {
+		if app.Version == "" {
+			return "/usr/bin/env " + def
+		}
+		return fmt.Sprintf("/opt/breefercp/runtimes/%s-%s/bin/%s", app.Runtime, app.Version, name)
+	}
 	var exec string
 	switch app.Runtime {
 	case "node":
-		exec = "/usr/bin/env node " + app.Command
+		exec = bin("node", "node") + " " + app.Command
 	case "python":
-		exec = "/usr/bin/env python3 " + app.Command
+		exec = bin("python3", "python3") + " " + app.Command
+	case "ruby":
+		// e.g. "bundle exec puma -p $PORT" or "config.ru" via rackup.
+		exec = bin("ruby", "ruby") + " " + app.Command
 	default:
 		return "", fmt.Errorf("%w: runtime %q", system.ErrInvalid, app.Runtime)
 	}

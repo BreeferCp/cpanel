@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"runtime"
 	"strconv"
@@ -216,6 +218,7 @@ func (s *Server) deleteFirewall(w http.ResponseWriter, r *http.Request) error {
 // allowedSettings is the allow-list of keys the settings API may write.
 var allowedSettings = map[string]bool{
 	"server_ip": true, "hostname": true, "nameserver1": true, "nameserver2": true,
+	"nameserver1_ip": true, "nameserver2_ip": true, "tools_url": true,
 	"contact_email": true, "company_name": true, "acme_email": true,
 }
 
@@ -253,9 +256,21 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 		if len(v) > 255 || strings.ContainsAny(v, "\r\n") {
 			return errBadRequest("invalid value for " + k)
 		}
-		if k == "server_ip" {
-			if err := system.CIDR(v); err != nil || strings.Contains(v, "/") {
-				return errBadRequest("server_ip must be an IP address")
+		if v == "" {
+			continue
+		}
+		switch k {
+		case "server_ip", "nameserver1_ip", "nameserver2_ip":
+			if net.ParseIP(v) == nil {
+				return errBadRequest(k + " must be an IP address")
+			}
+		case "hostname", "nameserver1", "nameserver2":
+			if err := system.Domain(v); err != nil {
+				return errBadRequest(k + " must be a fully qualified host name")
+			}
+		case "tools_url":
+			if u, err := url.Parse(v); err != nil || u.Scheme != "https" || u.Host == "" {
+				return errBadRequest("tools_url must be an https:// URL")
 			}
 		}
 	}
@@ -267,5 +282,41 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	s.audit(r, "settings.update", "", true, "")
+	s.publishGlue(r.Context())
 	return s.getSettings(w, r)
+}
+
+// nameservers returns the configured NS host names for new zones (nil lets
+// the DNS layer fall back to ns1/ns2.<zone>).
+func (s *Server) nameservers(ctx context.Context) []string {
+	var out []string
+	for _, k := range []string{"nameserver1", "nameserver2"} {
+		if v := s.setting(ctx, k); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// publishGlue writes A records for private nameservers (ns1.example.com) into
+// their parent zone when that zone is hosted on this server. Failures are
+// logged: the zone may simply live at another provider.
+func (s *Server) publishGlue(ctx context.Context) {
+	for _, n := range []string{"1", "2"} {
+		host, ip := s.setting(ctx, "nameserver"+n), s.setting(ctx, "nameserver"+n+"_ip")
+		if host == "" || ip == "" {
+			continue
+		}
+		label, zone, ok := strings.Cut(host, ".")
+		if !ok || system.Domain(zone) != nil {
+			continue
+		}
+		rec := provision.Record{Name: label, Type: "A", TTL: 3600, Content: ip}
+		if strings.Contains(ip, ":") {
+			rec.Type = "AAAA"
+		}
+		if err := s.prov.DNS().UpsertRecord(ctx, zone, rec); err != nil {
+			s.log.Warn("nameserver glue not published", "host", host, "err", err)
+		}
+	}
 }

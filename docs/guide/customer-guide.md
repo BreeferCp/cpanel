@@ -58,3 +58,47 @@ Under **Profile & Security** change your password, enable two-factor authenticat
 Use the sun/moon button next to your name in the sidebar to switch between light, dark and system.
 
 ![Dark theme](../images/dark-files.png)
+
+## App Installer
+
+![App Installer](../images/cp-installer.png)
+
+Pick an application, a domain and (optionally) a folder. A database and database user are created for you within your plan's limits.
+
+- **WordPress** is installed fully automatically: enter a site title and admin account.
+- **Drupal, Nextcloud, Matomo, Grav, DokuWiki** are downloaded from the official source; open the site afterwards to finish the setup wizard. The database name is shown under *Installed applications* and in **Databases**.
+- **Laravel** creates a Composer project; point the domain's document root at its `public` folder.
+
+## WordPress Manager
+
+![WordPress Manager](../images/cp-wordpress.png)
+
+For every WordPress site: update WordPress core, update plugins and themes (one by one or all), activate or deactivate plugins, switch maintenance mode, flush the object cache, and reset any user's password without email.
+
+## PHP Manager
+
+![PHP Manager](../images/cp-php.png)
+
+Choose the PHP version per domain from the versions your plan allows, and change common `php.ini` settings (memory limit, upload size, execution time, display errors, timezone and more). Security settings such as `disable_functions` and `open_basedir` stay with your provider.
+
+## Redirects and error pages
+
+- **Redirects:** send an exact path (for example `/old-page`) to any URL, permanently (301/308) or temporarily (302/307).
+- **Error Pages:** write your own HTML for 400, 401, 403, 404, 500, 502 and 503 errors. A starter template is filled in for you; **Restore default** switches back.
+
+## phpMyAdmin and webmail
+
+- In **Databases**, click **phpMyAdmin**. You are signed in automatically with a temporary login that can see only your databases.
+- In **Email → Webmail & clients**, open Roundcube or copy the IMAP/POP3/SMTP settings for your mail app.
+
+## Terminal
+
+If your plan includes shell access and your provider enabled it, **Terminal** opens a shell on the server as your user. Sessions close after 30 minutes idle or 4 hours.
+
+## Disk usage and logs
+
+**Disk Usage** shows which folders and databases use the most space. **Logs** shows the latest lines of each domain's access and error log and your PHP error log.
+
+## Support
+
+**Support** opens a ticket with your hosting provider. You get answers in the same thread, and can close or reopen the ticket.

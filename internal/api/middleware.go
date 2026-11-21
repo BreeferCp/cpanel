@@ -228,5 +228,26 @@ func (rl *rateLimiter) allow(key string) bool {
 	return b.count <= rl.limit
 }
 
+// blocked reports whether key has reached the limit, without counting.
+func (rl *rateLimiter) blocked(key string) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	b, ok := rl.buckets[key]
+	return ok && time.Now().Before(b.reset) && b.count >= rl.limit
+}
+
+// fail records one failed attempt for key.
+func (rl *rateLimiter) fail(key string) {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	now := time.Now()
+	b, ok := rl.buckets[key]
+	if !ok || now.After(b.reset) {
+		b = &bucket{reset: now.Add(rl.window)}
+		rl.buckets[key] = b
+	}
+	b.count++
+}
+
 // ensure store is referenced even when only used via Server.
 var _ = store.ErrNotFound

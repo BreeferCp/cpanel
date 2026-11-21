@@ -25,6 +25,16 @@ Every value reaching an nginx template, PHP-FPM pool, systemd unit, crontab, nft
 
 Every path is resolved with Go's `os.Root`, which refuses `..` and symlink escapes at the kernel level instead of checking strings first (so there is no check-then-use race). Archives are extracted with entry-count and uncompressed-size caps, symlink entries are skipped, and setuid/setgid/sticky bits can never be set. Downloads are always `attachment` with a sandboxing CSP, which prevents stored XSS from uploaded HTML or SVG on the panel origin.
 
+## Features added in 0.2
+
+- **Browser terminal:** a WebSocket bridged to a PTY. Requires the account shell mode *full*, which in turn requires the package to allow shell access. The shell runs as the account user inside its cgroup slice. The WebSocket library rejects cross-origin upgrades, which together with the SameSite=Strict cookie prevents cross-site WebSocket hijacking. Sessions end after 30 minutes idle or 4 hours.
+- **phpMyAdmin SSO:** the panel creates a temporary MariaDB user that can reach only that account's databases. The one-time token is redeemable only from loopback, only once and only within two minutes; the stored password is erased on redemption and the database user is dropped after two hours.
+- **App installer and WordPress manager:** every command runs as the account user via `runuser`. Passwords reach WP-CLI on stdin (`--prompt`), never on the command line. WP-CLI actions are an allow-list, and plugin, theme and user names are validated. The archive installer runs a constant script, with URLs and paths passed as positional parameters.
+- **php.ini overrides:** an allow-list of keys, each with a strict value pattern. Directives that affect isolation (`disable_functions`, `open_basedir`, `allow_url_include`) cannot be overridden.
+- **Redirects:** paths and targets admit neither `;` nor `$`, quotes, braces or whitespace, so they cannot inject nginx directives or variables (covered by tests).
+- **Reseller hierarchy:** tenancy includes the owner chain (a master reseller sees its resellers' customers). Integration tests assert that an unrelated reseller gets 404 and that allocation limits are enforced.
+- **Login rate limiting** counts only failed attempts, so busy offices behind one IP are not locked out by successful sign-ins.
+
 ## Transport and headers
 
 TLS 1.2+ on the panel and all generated vhosts. The API sends `Content-Security-Policy` (`script-src 'self'`, no inline scripts), `X-Frame-Options: DENY`, `nosniff`, a strict referrer policy and HSTS over TLS.

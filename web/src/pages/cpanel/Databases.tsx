@@ -1,4 +1,4 @@
-import { Database as DbIcon, KeyRound, Plus, Trash2, UserPlus } from "lucide-react";
+import { Database as DbIcon, ExternalLink, KeyRound, Plus, Trash2, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { api } from "@/lib/api";
 import { formatMB } from "@/lib/format";
@@ -55,6 +55,11 @@ export default function Databases() {
     { invalidate: [dbKey, userKey], success: "Deleted", onSuccess: () => setDel(null) },
   );
 
+  // Single sign-on: the panel mints a short-lived database user for this session.
+  const pma = useMutate(() => api.post<{ url: string }>(`/accounts/${aid}/phpmyadmin`), {
+    onSuccess: (r) => window.open(r.url, "_blank", "noopener"),
+  });
+
   const userName = (id: string) => users.data?.find((u) => u.id === id)?.name ?? id;
 
   return (
@@ -64,6 +69,9 @@ export default function Databases() {
         description="MariaDB databases and users. Every name is prefixed with your account name."
         actions={
           <>
+            <Button icon={ExternalLink} loading={pma.isPending} disabled={!dbs.data?.length} onClick={() => pma.mutate()}>
+              phpMyAdmin
+            </Button>
             <Button icon={UserPlus} onClick={() => setModal("user")}>
               New user
             </Button>

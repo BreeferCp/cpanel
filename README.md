@@ -1,85 +1,101 @@
 # BreeferCP
 
-A free, open-source web hosting control panel. One panel for server administrators (the WHM role), resellers, and hosting customers (the cPanel role), built on a stack you can read end to end.
+A free, open-source web hosting control panel. One panel for the server administrator (the WHM role), master resellers, resellers, and hosting customers (the cPanel role), built on a stack you can read end to end.
 
-- **Backend:** Go. One static binary is the control plane, API, and provisioner.
+- **Backend:** Go. One static binary is the control plane, API, provisioner and metrics collector.
 - **Frontend:** React, TypeScript, Tailwind CSS. Light theme by default, dark theme optional.
 - **Data:** SQLite for a single node, PostgreSQL for a cluster.
-- **Hosting stack it drives:** nginx, PHP-FPM, MariaDB, Postfix + Dovecot, PowerDNS, OpenDKIM, nftables.
-- **Isolation:** every account is a real Linux user with its own PHP-FPM pool and a systemd/cgroups v2 slice (CPU, memory, I/O, process limits). Node.js, Python and container apps run as hardened systemd services or Docker containers inside the same slice.
+- **Hosting stack it drives:** nginx **or OpenLiteSpeed**, PHP-FPM (multi-version), MariaDB, Postfix + Dovecot, PowerDNS, OpenDKIM, nftables, phpMyAdmin, Roundcube, WP-CLI.
+- **Isolation:** every account is a real Linux user with its own PHP pool and a systemd/cgroups v2 slice (CPU, memory, I/O, processes), plus a filesystem quota. Node.js, Python, Ruby and Docker apps run inside the same slice.
 - **Billing:** a provisioning API plus ready-made modules for **WHMCS** and **Paymenter**.
 
 License: [AGPL-3.0-or-later](LICENSE).
 
-> **Status: early alpha (0.1).** The architecture, API, security model and UI are in place and covered by tests. The host-level provisioning code has been exercised in dry-run mode and by unit tests, but has **not yet been validated on a live server**. Do not put production customers on it yet. See [Project status](#project-status).
+> **Status: alpha (0.2).** Everything below is implemented, covered by automated tests, and exercised end to end in dry-run mode by a browser crawler (every page, every role, both themes, desktop and mobile). The host-level provisioning has **not yet been validated on a live server**, so do not put production customers on it yet. See [Project status](#project-status).
 
 ## Screenshots
 
-| Administrator overview | Accounts |
+| Server overview (WHM) | Customer home (cPanel) |
 |---|---|
-| ![Server overview](docs/images/whm-overview.png) | ![Accounts](docs/images/whm-accounts.png) |
+| ![Server overview](docs/images/whm-overview.png) | ![Customer home](docs/images/cp-overview.png) |
 
-| File manager | Dark theme |
+| Resellers and master resellers | Support tickets |
 |---|---|
-| ![File manager](docs/images/cp-files.png) | ![Dark theme](docs/images/dark-overview.png) |
+| ![Resellers](docs/images/whm-resellers.png) | ![Tickets](docs/images/whm-tickets.png) |
 
-| Email | DNS zone editor |
+| App installer | WordPress manager |
 |---|---|
-| ![Email](docs/images/cp-email.png) | ![DNS](docs/images/cp-dns.png) |
+| ![App installer](docs/images/cp-installer.png) | ![WordPress manager](docs/images/cp-wordpress.png) |
+
+| File manager | PHP manager |
+|---|---|
+| ![File manager](docs/images/cp-files.png) | ![PHP manager](docs/images/cp-php.png) |
+
+| Email | Dark theme |
+|---|---|
+| ![Email](docs/images/cp-email.png) | ![Dark theme](docs/images/dark-whm-overview.png) |
+
+More in [docs/images](docs/images).
 
 ## Guides
 
 - [Installation guide](docs/guide/installation.md)
-- [Administrator guide](docs/guide/administrator-guide.md) (accounts, packages, resellers, firewall, audit)
-- [Customer guide](docs/guide/customer-guide.md) (domains, SSL, files, databases, email, DNS, apps)
+- [Administrator guide](docs/guide/administrator-guide.md): accounts, packages, resellers, shell access, firewall, nameservers, metrics
+- [Customer guide](docs/guide/customer-guide.md): every customer feature, step by step
 - [Connecting WHMCS or Paymenter](docs/guide/billing-setup.md)
 - [Architecture](docs/architecture.md), [Security model](docs/security.md), [Billing API](docs/billing-api.md)
 
-## What is in the box
+## Features
 
-| Area | Administrator / reseller | Customer |
-|---|---|---|
-| Accounts | Create, suspend, reactivate, terminate; change package; sign in as customer (one-time SSO) | Resource usage overview |
-| Plans | Packages with disk, bandwidth, domain, database, mailbox, cron, app quotas and cgroup CPU/memory/I/O/process limits | |
-| Web | | Domains (primary, addon, subdomain, alias), per-domain PHP version, force-HTTPS, nginx vhosts |
-| TLS | | Let's Encrypt (HTTP-01, auto-renew) and custom certificates |
-| Files | | Browser file manager: upload (drag and drop), edit, rename, copy, chmod, zip/unzip, download |
-| Databases | | MariaDB databases, users and grants with an account-name prefix |
-| Email | | Mailboxes with quotas, forwarders, catch-all, DKIM and DMARC publishing |
-| DNS | | Zone editor backed by the PowerDNS API |
-| Apps | | Node.js, Python and Docker applications with reverse-proxy to a domain |
-| Automation | | Cron jobs, SSH keys, full or database-only backups with restore |
-| Server | Service status and control, firewall (nftables), settings, audit log | |
-| Resellers | Create resellers; each is fully isolated from other resellers | Reseller manages own customers and packages |
-| Security | | Argon2id passwords, TOTP two-factor with recovery codes, session list, scoped API tokens |
-| Billing | WHMCS module, Paymenter extension, generic idempotent REST API | |
+### Server administrator (WHM)
+
+| Area | What you get |
+|---|---|
+| Dashboard | Live CPU, memory, load and network charts (1h, 6h, 24h), top accounts by resource use, open tickets, capacity |
+| Accounts | Create, modify (package, email, password, shell), suspend with reason, reactivate, terminate, sign in as customer |
+| Packages | Disk, bandwidth, domain, database, mailbox, cron and app quotas; CPU, memory, I/O and process limits (cgroups v2); allowed PHP versions; shell access |
+| Resellers | Resellers and **master resellers** (who create resellers), each with account, disk and sub-reseller allocation limits, suspend and delete |
+| Shell access | Per account: disabled, SFTP only (forced by sshd) or full shell, gated by the package |
+| Support | Ticket desk with departments, priorities and statuses |
+| Server | Service status and control, nftables firewall, nameservers with automatic glue records, audit log, settings |
+| Web server | nginx (default) or OpenLiteSpeed with `.htaccess` support and per-account LSAPI |
+
+### Customer (cPanel)
+
+| Area | What you get |
+|---|---|
+| Home | Quota meters, 24-hour CPU and memory charts against plan limits, cPanel-style tool grid |
+| Files | File manager (upload, edit, rename, copy, chmod, zip/unzip, download), disk usage by folder, backups with restore |
+| Domains | Addon domains, subdomains, aliases, redirects (301/302/307/308), DNS zone editor, SSL (Let's Encrypt or own certificate), custom error pages |
+| Email | Mailboxes with quotas, forwarders, catch-all, DKIM and DMARC, Roundcube webmail, mail client settings |
+| Databases | MariaDB databases, users and grants, **phpMyAdmin single sign-on** |
+| Software | **One-click app installer** (WordPress, Drupal, Nextcloud, Matomo, Grav, DokuWiki, Laravel), **WordPress manager** (core/plugin/theme updates, maintenance mode, password reset), **PHP manager** (version per domain, php.ini editor), Node.js, Python and Ruby apps with version selection, Docker |
+| Advanced | **Browser terminal**, SSH keys, cron jobs, access/error/PHP logs |
+| Account | Support tickets, password, two-factor authentication, sessions, API tokens |
 
 ## Architecture
 
 ```
  Browser (React SPA) ──┐
- WHMCS / Paymenter ────┼──► breeferd  (Go: REST API, auth, RBAC, audit)
+ WHMCS / Paymenter ────┼──► breeferd  (Go: REST API, auth, RBAC, audit, metrics)
  CLI / scripts ────────┘        │
                                 ├─► store      SQLite or PostgreSQL
                                 └─► provision  host changes, no shell, validated inputs
-                                       ├─ useradd / systemd slices (cgroups v2)
-                                       ├─ nginx vhosts · PHP-FPM pools
-                                       ├─ MariaDB · PowerDNS (HTTP API)
-                                       ├─ Postfix/Dovecot read mail tables straight from the panel database
-                                       └─ nftables · Docker · cron · ACME
+                                       ├─ useradd · systemd slices (cgroups v2) · quotas · sshd groups
+                                       ├─ nginx or OpenLiteSpeed vhosts · PHP-FPM pools
+                                       ├─ MariaDB · PowerDNS (HTTP API) · WP-CLI · Composer
+                                       ├─ Postfix/Dovecot read the panel database directly
+                                       └─ nftables · Docker · cron · ACME · PTY terminal
 ```
 
-More detail in [docs/architecture.md](docs/architecture.md). The security model is in [docs/security.md](docs/security.md). The billing API is in [docs/billing-api.md](docs/billing-api.md).
+Details in [docs/architecture.md](docs/architecture.md) and [docs/security.md](docs/security.md).
 
 ## Quick start (development)
 
-Requirements: Go 1.26+ (the file manager relies on `os.Root` methods added in 1.25) and Node 20+. Dry-run mode logs host commands instead of running them, so this works on any OS.
+Requirements: Go 1.26+ and Node 20+. Dry-run mode logs host commands instead of running them, so this works on any OS.
 
 ```bash
-# 1. Build the UI
 cd web && npm install && npm run build && cd ..
-
-# 2. Create an admin and start the daemon in dry-run mode
 export BREEFER_DRY_RUN=true BREEFER_LISTEN=127.0.0.1:2087 \
        BREEFER_DB_DSN=./dev.db BREEFER_DATA_DIR=./dev-data \
        BREEFER_WEB_DIR=./web/dist BREEFER_HOME_BASE=./dev-home
@@ -87,7 +103,7 @@ go run ./cmd/breeferd create-admin -config /dev/null -email you@example.com   # 
 go run ./cmd/breeferd serve -config /dev/null
 ```
 
-Open <http://127.0.0.1:2087>. For UI work, run `npm run dev` in `web/` (Vite proxies `/api` to the daemon).
+Open <http://127.0.0.1:2087>. In dry-run mode the charts show labelled demo data. For UI work run `npm run dev` in `web/`.
 
 ```bash
 make test        # Go tests (API, auth, provisioning, file jail) + UI type-check
@@ -102,27 +118,26 @@ On a fresh Debian 12+ or Ubuntu 22.04+ machine, from an extracted release tarbal
 sudo ./deploy/install.sh --email you@example.com --hostname panel.example.com
 ```
 
-The installer is for a **dedicated** server: it takes over nginx, Postfix, Dovecot and firewall configuration.
+The installer is for a **dedicated** server: it takes over nginx, Postfix, Dovecot, SSH access groups and firewall configuration.
 
 ## Billing integrations
 
-- **WHMCS:** copy [integrations/whmcs/modules/servers/breefercp](integrations/whmcs/modules/servers/breefercp) into your WHMCS `modules/servers/`. Create an API token with the `billing` scope, add a server of type *BreeferCP*, and put the token in *Access Hash*.
-- **Paymenter:** copy [integrations/paymenter/BreeferCP](integrations/paymenter/BreeferCP) to `extensions/Servers/BreeferCP` and enable it.
-- **Anything else:** call the REST API. Creation is idempotent on `external_ref`, so retried webhooks are safe. See [docs/billing-api.md](docs/billing-api.md).
+- **WHMCS:** copy [integrations/whmcs/modules/servers/breefercp](integrations/whmcs/modules/servers/breefercp) into WHMCS `modules/servers/`, create an API token with the `billing` scope and put it in the server's *Access Hash*.
+- **Paymenter:** copy [integrations/paymenter/BreeferCP](integrations/paymenter/BreeferCP) to `extensions/Servers/BreeferCP`.
+- **Anything else:** the REST API is idempotent on `external_ref`. See [docs/billing-api.md](docs/billing-api.md).
 
 ## Project status
 
-Working and tested: authentication (login, lockout, TOTP, sessions, CSRF, API tokens), RBAC and tenant isolation, the full account lifecycle, quotas, the file manager (including symlink and zip-slip resistance), configuration generators (nginx, PHP-FPM, systemd slices, nftables, cron, app units) with injection tests, SSO, the billing API, and the complete UI.
+Working and tested: authentication (lockout, TOTP, sessions, CSRF, API tokens, SSO), the four-level tenant hierarchy, reseller allocation limits, the account lifecycle, quotas, shell access control, the file manager (symlink and zip-slip resistant), config generators for nginx, OpenLiteSpeed, PHP-FPM, systemd, nftables, cron and app units (with injection tests), redirects, error pages, php.ini overrides, tickets, the installer and WordPress manager (WP-CLI action allow-list), phpMyAdmin SSO (loopback-only, single use), metrics, the billing API and the full UI.
 
-Not done yet, in rough priority order:
+Not done yet:
 
-1. **Live-server validation** of every provisioner against real nginx, PHP-FPM, MariaDB, Postfix/Dovecot and PowerDNS (the installer has also not been run on a real host).
-2. **Multi-node clusters:** the schema has `node_id` and PostgreSQL support, but the node agent and scheduler are not written yet.
-3. Bandwidth accounting from nginx logs, backup destinations beyond local disk (S3/SFTP), scheduled backups.
-4. Email: spam filtering, webmail, per-mailbox Sieve filters (the schema exists), autoresponders.
-5. FTP/SFTP-only users, ModSecurity/WAF, malware scanning, one-click app installers, phpMyAdmin single sign-on, DNS clustering, DNSSEC toggle in the UI.
-6. Translations, an OpenAPI document, and a public CLI.
-7. A third-party security review before any production use.
+1. **Live-server validation** of every provisioner and of the installer on real Debian and Ubuntu hosts. OpenLiteSpeed support is the least proven.
+2. **Multi-node clusters:** PostgreSQL and `node_id` exist, but the node agent and scheduler are not written.
+3. Bandwidth accounting from web logs, off-site backup targets (S3/SFTP), scheduled backups.
+4. Spam filtering, autoresponders and Sieve filters in the UI, FTP-only users, WAF and malware scanning, DNSSEC toggle.
+5. Translations, an OpenAPI document and a CLI.
+6. An independent security review before production use.
 
 ## Contributing
 

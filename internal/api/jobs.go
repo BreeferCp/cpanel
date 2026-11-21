@@ -17,6 +17,7 @@ func (s *Server) RunJobs(ctx context.Context) {
 	defer housekeeping.Stop()
 	// Run once shortly after start so a fresh install is not idle for hours.
 	time.AfterFunc(30*time.Second, func() { s.collectUsage(ctx) })
+	go s.collectMetrics(ctx)
 	for {
 		select {
 		case <-ctx.Done():
@@ -27,6 +28,7 @@ func (s *Server) RunJobs(ctx context.Context) {
 			s.collectUsage(ctx)
 		case <-housekeeping.C:
 			s.purgeExpired(ctx)
+			s.purgePMAUsers(ctx)
 		}
 	}
 }

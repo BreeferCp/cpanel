@@ -194,6 +194,60 @@ if [[ ! -f /etc/breefercp/panel.crt ]]; then
   chown root:breefer /etc/breefercp/panel.key /etc/breefercp/panel.crt
 fi
 
+log "Installing developer tools (WP-CLI, Composer)"
+apt-get install -y -qq composer git
+if [[ ! -x /usr/local/bin/wp ]]; then
+  curl -fsSL -o /usr/local/bin/wp https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+  chmod 0755 /usr/local/bin/wp
+fi
+
+log "Configuring SSH access control"
+getent group breefer-sftp >/dev/null || groupadd --system breefer-sftp
+install -m 0644 "$SRC/deploy/ssh/breefercp.conf" /etc/ssh/sshd_config.d/50-breefercp.conf
+sshd -t && systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
+
+log "Installing phpMyAdmin and Roundcube webmail"
+echo "phpmyadmin phpmyadmin/dbconfig-install boolean false" | debconf-set-selections
+echo "phpmyadmin phpmyadmin/reconfigure-webserver multiselect" | debconf-set-selections
+echo "roundcube-core roundcube/dbconfig-install boolean true" | debconf-set-selections
+echo "roundcube-core roundcube/database-type select sqlite3" | debconf-set-selections
+apt-get install -y -qq phpmyadmin roundcube roundcube-sqlite3 roundcube-plugins
+install -m 0644 "$SRC/deploy/phpmyadmin/breefercp-signon.php" /usr/share/phpmyadmin/breefercp-signon.php
+if ! grep -q BreeferPMA /etc/phpmyadmin/config.inc.php; then
+  cat >> /etc/phpmyadmin/config.inc.php <<'PMA'
+// --- BreeferCP single sign-on ---
+$cfg['Servers'][1]['auth_type'] = 'signon';
+$cfg['Servers'][1]['SignonSession'] = 'BreeferPMA';
+$cfg['Servers'][1]['SignonURL'] = 'breefercp-signon.php';
+$cfg['Servers'][1]['host'] = 'localhost';
+PMA
+fi
+# Roundcube talks to the local Dovecot/Postfix with the mailbox credentials.
+cat > /etc/roundcube/config.inc.php.d-breefercp 2>/dev/null <<'RC' || true
+<?php
+$config['imap_host'] = 'ssl://localhost:993';
+$config['smtp_host'] = 'tls://localhost:587';
+$config['imap_conn_options'] = $config['smtp_conn_options'] = ['ssl' => ['verify_peer' => false, 'verify_peer_name' => false]];
+$config['product_name'] = 'Webmail';
+RC
+grep -q breefercp /etc/roundcube/config.inc.php || echo "include '/etc/roundcube/config.inc.php.d-breefercp';" >> /etc/roundcube/config.inc.php
+PHP_TOOLS="${PHP_VERSIONS[0]}"
+cat > "/etc/php/${PHP_TOOLS}/fpm/pool.d/breefer-tools.conf" <<POOL
+[breefer-tools]
+user = www-data
+group = www-data
+listen = /run/php/breefer-tools.sock
+listen.owner = www-data
+listen.group = www-data
+pm = ondemand
+pm.max_children = 10
+php_admin_value[upload_max_filesize] = 128M
+php_admin_value[post_max_size] = 128M
+POOL
+systemctl reload "php${PHP_TOOLS}-fpm" || true
+install -m 0644 "$SRC/deploy/nginx/tools.conf" /etc/nginx/conf.d/10-breefercp-tools.conf
+nginx -t && systemctl reload nginx
+
 log "Starting BreeferCP"
 install -m 0644 "$SRC/deploy/breeferd.service" /etc/systemd/system/breeferd.service
 systemctl daemon-reload

@@ -1,4 +1,5 @@
-import { Ban, LogIn, MoreHorizontal, Plus, Search, Trash2, Users } from "lucide-react";
+import { Ban, LogIn, MoreHorizontal, Pencil, Plus, Search, Trash2, Users } from "lucide-react";
+import { ModifyAccount } from "./ModifyAccount";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
@@ -32,6 +33,7 @@ export default function Accounts() {
   const [reason, setReason] = useState("");
   const [del, setDel] = useState<Account | null>(null);
   const [menu, setMenu] = useState<string | null>(null);
+  const [modify, setModify] = useState<Account | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -110,6 +112,8 @@ export default function Accounts() {
                 <Th>Domain</Th>
                 <Th>User</Th>
                 <Th>Package</Th>
+                <Th>Owner</Th>
+                <Th>Shell</Th>
                 <Th>Disk</Th>
                 <Th>Status</Th>
                 <Th>Created</Th>
@@ -129,6 +133,10 @@ export default function Accounts() {
                   </Td>
                   <Td className="text-muted">{a.sys_user}</Td>
                   <Td>{a.package_name}</Td>
+                  <Td className="text-muted">{a.owner_name || "root"}</Td>
+                  <Td>
+                    <Badge tone={a.shell === "full" ? "warn" : "neutral"}>{a.shell === "full" ? "Shell" : a.shell === "sftp" ? "SFTP" : "Off"}</Badge>
+                  </Td>
                   <Td className="tabular-nums text-muted">{formatMB(a.disk_used_mb)}</Td>
                   <Td>
                     <Badge tone={a.status === "active" ? "ok" : "bad"}>{a.status === "active" ? "Active" : "Suspended"}</Badge>
@@ -139,6 +147,9 @@ export default function Accounts() {
                       <IconButton icon={MoreHorizontal} label={`Actions for ${a.primary_domain}`} onClick={() => setMenu(menu === a.id ? null : a.id)} />
                       {menu === a.id && (
                         <div role="menu" className="absolute right-0 z-20 mt-1 w-48 overflow-hidden rounded-lg border border-line bg-surface py-1 text-[13px] shadow-pop">
+                          <MenuItem icon={Pencil} onClick={() => (setMenu(null), setModify(a))}>
+                            Modify account
+                          </MenuItem>
                           <MenuItem icon={LogIn} onClick={() => (setMenu(null), sso.mutate(a))}>
                             Sign in as customer
                           </MenuItem>
@@ -237,6 +248,8 @@ export default function Accounts() {
           {(id) => <Input id={id} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Overdue invoice" />}
         </Field>
       </Modal>
+
+      <ModifyAccount account={modify} onClose={() => setModify(null)} invalidate={[key]} />
 
       <ConfirmDialog
         open={!!del}
