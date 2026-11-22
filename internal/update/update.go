@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -172,10 +173,24 @@ func (c *Client) Apply(ctx context.Context, r *Release, p Paths) error {
 	if err != nil {
 		return err
 	}
-	if err := installBinary(filepath.Join(root, "breeferd"), p.Binary); err != nil {
+	webSrc := filepath.Join(root, "web")
+	if _, err := os.Stat(filepath.Join(webSrc, "index.html")); err != nil {
+		return errors.New("release does not contain the web UI; nothing was changed")
+	}
+	// Everything that can fail slowly happens before anything is replaced.
+	staged, err := stageDir(webSrc, p.WebDir)
+	if err != nil {
 		return err
 	}
-	return swapDir(filepath.Join(root, "web"), p.WebDir)
+	if err := installBinary(filepath.Join(root, "breeferd"), p.Binary); err != nil {
+		_ = os.RemoveAll(staged)
+		return err
+	}
+	if err := swapDir(staged, p.WebDir); err != nil {
+		// Never leave a new binary with an old UI.
+		return errors.Join(err, os.Rename(p.Binary+".prev", p.Binary))
+	}
+	return nil
 }
 
 // Rollback restores the binary and web UI kept by the previous Apply.
@@ -342,6 +357,9 @@ func installBinary(src, dst string) error {
 	if err := out.Close(); err != nil {
 		return err
 	}
+	if err := os.Chmod(tmp, 0o755); err != nil {
+		return err
+	}
 	if _, err := os.Stat(dst); err == nil {
 		if err := copyFile(dst, dst+".prev"); err != nil {
 			return err
@@ -367,16 +385,60 @@ func copyFile(src, dst string) error {
 	return out.Close()
 }
 
-// swapDir moves src into place at dst, keeping the old copy as dst.prev.
-func swapDir(src, dst string) error {
-	if _, err := os.Stat(src); err != nil {
-		return nil // release without a UI (not expected)
+// stageDir copies src next to dst and returns the copy's path.
+//
+// It must copy, not rename: the download is in /var/lib and the UI in
+// /usr/share, which are separate mounts under the service's sandbox.
+func stageDir(src, dst string) (string, error) {
+	tmp := dst + ".new"
+	if err := os.RemoveAll(tmp); err != nil {
+		return "", err
 	}
-	_ = os.RemoveAll(dst + ".prev")
+	err := filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, p)
+		if err != nil {
+			return err
+		}
+		to := filepath.Join(tmp, rel)
+		// Modes are set explicitly: the service runs with UMask=0007.
+		if d.IsDir() {
+			if err := os.MkdirAll(to, 0o755); err != nil {
+				return err
+			}
+			return os.Chmod(to, 0o755)
+		}
+		if err := copyFile(p, to); err != nil {
+			return err
+		}
+		return os.Chmod(to, 0o644)
+	})
+	if err != nil {
+		_ = os.RemoveAll(tmp)
+		return "", err
+	}
+	return tmp, nil
+}
+
+// swapDir renames a staged copy into place, keeping the old one as dst.prev.
+func swapDir(staged, dst string) error {
+	if err := os.RemoveAll(dst + ".prev"); err != nil {
+		return err
+	}
+	moved := false
 	if _, err := os.Stat(dst); err == nil {
 		if err := os.Rename(dst, dst+".prev"); err != nil {
 			return err
 		}
+		moved = true
 	}
-	return os.Rename(src, dst)
+	if err := os.Rename(staged, dst); err != nil {
+		if moved {
+			err = errors.Join(err, os.Rename(dst+".prev", dst))
+		}
+		return err
+	}
+	return nil
 }

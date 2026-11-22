@@ -111,6 +111,27 @@ func TestChecksumMismatchChangesNothing(t *testing.T) {
 	}
 }
 
+func TestReleaseWithoutUIChangesNothing(t *testing.T) {
+	tgz := tarball(t, map[string]string{"breefercp-0.9.0/breeferd": "NEW"}, nil)
+	h := sha256.Sum256(tgz)
+	c := serve(t, tgz, hex.EncodeToString(h[:]))
+	dir := t.TempDir()
+	p := Paths{Binary: filepath.Join(dir, "breeferd"), WebDir: filepath.Join(dir, "web"), WorkDir: filepath.Join(dir, "work")}
+	if err := os.WriteFile(p.Binary, []byte("OLD"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	r, err := c.Latest(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Apply(context.Background(), r, p); err == nil {
+		t.Fatal("expected a failure for a release without a UI")
+	}
+	if b, _ := os.ReadFile(p.Binary); string(b) != "OLD" {
+		t.Fatal("binary changed although the update failed")
+	}
+}
+
 func TestExtractRejectsTraversal(t *testing.T) {
 	tgz := tarball(t, map[string]string{"../../escape": "x"}, nil)
 	dir := t.TempDir()

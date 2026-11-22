@@ -14,7 +14,7 @@ The installer takes over nginx, Postfix, Dovecot, PowerDNS and nftables. Do not 
 
 ## 1. Get a release
 
-Build one yourself (see [Building](#building-from-source)) or download a release tarball, then extract it:
+Download the tarball for your architecture and `SHA256SUMS` from [Releases](https://github.com/BreeferCp/cpanel/releases), check it with `sha256sum -c --ignore-missing SHA256SUMS` (or build one yourself, see [Building](#building-from-source)), then extract it:
 
 ```bash
 tar xzf breefercp-<version>-linux-amd64.tar.gz
@@ -89,6 +89,8 @@ Back up `/var/lib/breefercp` (panel database and secret key) and `/etc/breefercp
 - **Operating system packages** on the same page runs `apt-get upgrade` in the background and shows its output.
 
 Database migrations run automatically when the new version starts.
+
+The updater replaces only the binary and the UI. When release notes say that service configuration changed, and for **every install from before 0.5.0**, extract the new release and run `sudo ./deploy/install.sh` again with the same `--email` and `--hostname`. This rewrites `/etc/breefercp/breefercp.conf`, so keep a copy of your own changes.
 
 ## Building from source
 

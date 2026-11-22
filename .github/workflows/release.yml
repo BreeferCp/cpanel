@@ -33,4 +33,8 @@ jobs:
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/SHA256SUMS --generate-notes --title "BreeferCP ${GITHUB_REF_NAME#v}"
+        run: |
+          args=(--generate-notes)
+          notes="docs/releases/$GITHUB_REF_NAME.md"
+          if [[ -f "$notes" ]]; then args+=(--notes-file "$notes"); fi
+          gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/SHA256SUMS "${args[@]}" --title "BreeferCP ${GITHUB_REF_NAME#v}"
