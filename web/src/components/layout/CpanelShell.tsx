@@ -1,9 +1,9 @@
 import clsx from "clsx";
-import { Home, Info, LifeBuoy, Mail, Menu, Search, UserCog, X } from "lucide-react";
+import { ChevronDown, Home, Info, LifeBuoy, Mail, Menu, Search, UserCog, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useGet } from "@/lib/hooks";
-import { availableTools, matchTool } from "@/lib/catalog";
+import { availableTools, matchTool, toolGroups } from "@/lib/catalog";
 import type { Account } from "@/lib/types";
 import { usePanel } from "@/state/panel";
 import { IconButton } from "../ui/Button";
@@ -11,10 +11,62 @@ import { PanelMark, UserChip } from "./common";
 
 const rail = [
   { to: "/hosting", label: "Home", icon: Home, end: true },
-  { to: "/hosting/email", label: "Email", icon: Mail },
   { to: "/tickets", label: "Support", icon: LifeBuoy },
   { to: "/profile", label: "Account", icon: UserCog },
 ];
+
+/** Every tool by group; the group of the open page starts expanded. */
+function ToolNav({ account, onNavigate }: { account?: Account; onNavigate: () => void }) {
+  const { pathname } = useLocation();
+  const list = useMemo(() => availableTools(account?.disabled_features, account?.shell), [account]);
+  const href = (to: string) => (to.startsWith("/") ? to : `/hosting${to ? `/${to}` : ""}`);
+  const current = list.find((t) => href(t.to) === pathname)?.group;
+  const [open, setOpen] = useState<string | undefined>(current);
+  useEffect(() => {
+    if (current) setOpen(current);
+  }, [current]);
+  if (!account) return null;
+  return (
+    <div className="mt-3 space-y-px border-t border-line pt-3">
+      {toolGroups.map((g) => {
+        const items = list.filter((t) => t.group === g);
+        if (!items.length) return null;
+        return (
+          <div key={g}>
+            <button
+              type="button"
+              aria-expanded={open === g}
+              onClick={() => setOpen(open === g ? undefined : g)}
+              className={clsx("flex w-full items-center justify-between rounded-md px-2.5 py-2 text-[13px] transition-colors hover:bg-surface2", current === g ? "font-medium text-ink" : "text-muted")}
+            >
+              {g}
+              <ChevronDown className={clsx("size-3.5 transition-transform", open === g && "rotate-180")} aria-hidden />
+            </button>
+            {open === g && (
+              <ul className="mb-1 ml-2.5 border-l border-line pl-1.5">
+                {items.map((t) => (
+                  <li key={t.label}>
+                    <NavLink
+                      to={href(t.to)}
+                      end
+                      onClick={onNavigate}
+                      className={({ isActive }) =>
+                        clsx("flex items-center gap-2 rounded-md px-2 py-1.5 text-[12.5px] transition-colors", isActive ? "bg-accent-soft font-medium text-accent" : "text-muted hover:bg-surface2 hover:text-ink")
+                      }
+                    >
+                      <t.icon className="size-3.5 shrink-0" aria-hidden />
+                      <span className="truncate">{t.label}</span>
+                    </NavLink>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 /** Global tool search in the top bar (like cPanel's "Search Tools"). */
 function ToolSearch({ account }: { account?: Account }) {
@@ -44,6 +96,9 @@ function ToolSearch({ account }: { account?: Account }) {
       <label className="relative block">
         <span className="sr-only">Search tools</span>
         <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-subtle" aria-hidden />
+        {!q && (
+          <kbd className="pointer-events-none absolute right-2 top-1/2 hidden -translate-y-1/2 rounded border border-line bg-surface px-1.5 text-[11px] text-subtle sm:block">/</kbd>
+        )}
         <input
           value={q}
           role="combobox"
@@ -61,7 +116,7 @@ function ToolSearch({ account }: { account?: Account }) {
             if (e.key === "Enter" && results[active]) go(results[active].to);
             if (e.key === "Escape") setOpen(false);
           }}
-          placeholder="Search tools (/ to focus)"
+          placeholder="Search tools"
           className="h-8 w-full rounded-md border border-line bg-surface2 pl-8 pr-2 text-[13px] text-ink placeholder:text-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-[var(--focus)]"
         />
       </label>
@@ -125,10 +180,10 @@ export function CpanelShell() {
       </header>
 
       {open && <div className="fixed inset-0 z-40 bg-black/40 md:hidden" onClick={close} aria-hidden />}
-      <div className="md:grid md:grid-cols-[200px_1fr]">
+      <div className="md:grid md:grid-cols-[224px_1fr]">
         <aside
           className={clsx(
-            "fixed inset-y-0 left-0 z-50 flex w-[220px] flex-col border-r border-line bg-surface transition-transform md:sticky md:top-14 md:z-10 md:h-[calc(100vh-3.5rem)] md:w-auto md:translate-x-0",
+            "fixed inset-y-0 left-0 z-50 flex w-[264px] flex-col border-r border-line bg-surface transition-transform md:sticky md:top-14 md:z-10 md:h-[calc(100vh-3.5rem)] md:w-auto md:translate-x-0",
             open ? "translate-x-0" : "-translate-x-full",
           )}
         >
@@ -136,7 +191,7 @@ export function CpanelShell() {
             <span className="text-[14px] font-semibold">Menu</span>
             <IconButton icon={X} label="Close navigation" onClick={close} />
           </div>
-          <nav className="flex-1 space-y-px px-2 py-3" aria-label="cPanel">
+          <nav className="min-h-0 flex-1 space-y-px overflow-y-auto px-2 py-3" aria-label="cPanel">
             {rail.map((r) => (
               <NavLink
                 key={r.to}
@@ -159,6 +214,7 @@ export function CpanelShell() {
                 <Mail className="size-4" aria-hidden /> Webmail
               </a>
             )}
+            <ToolNav account={acct.data} onNavigate={close} />
           </nav>
           <div className="border-t border-line p-3 lg:hidden">
             <UserChip subtitle={acct.data?.primary_domain} />

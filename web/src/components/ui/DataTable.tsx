@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Search, type LucideIcon 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button } from "./Button";
 import { Checkbox, Input, Select } from "./Form";
-import { EmptyState, ErrorNote, Loading } from "./Layout";
+import { EmptyState, ErrorNote, Loading, useColumnLabels } from "./Layout";
 
 export interface Column<T> {
   key: string;
@@ -21,6 +21,17 @@ export interface BulkAction<T> {
   icon?: LucideIcon;
   danger?: boolean;
   onRun: (rows: T[]) => void;
+}
+
+function StackTable({ children }: { children: ReactNode }) {
+  const ref = useColumnLabels();
+  return (
+    <div className="relative overflow-x-auto">
+      <table ref={ref} className="stack w-full border-collapse text-left text-[13px]">
+        {children}
+      </table>
+    </div>
+  );
 }
 
 /**
@@ -164,8 +175,7 @@ export function DataTable<T>({
       ) : !filtered.length ? (
         <EmptyState icon={Search} title="No matches" description={`Nothing matches “${q}”.`} />
       ) : (
-        <div className="relative overflow-x-auto">
-          <table className="w-full border-collapse text-left text-[13px]">
+        <StackTable>
             <thead>
               <tr>
                 {bulk && (
@@ -232,8 +242,7 @@ export function DataTable<T>({
                 );
               })}
             </tbody>
-          </table>
-        </div>
+        </StackTable>
       )}
 
       {filtered.length > 10 && (

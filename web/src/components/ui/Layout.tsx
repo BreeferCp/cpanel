@@ -1,5 +1,6 @@
 import clsx from "clsx";
 import { ChevronRight, Loader2, type LucideIcon } from "lucide-react";
+import { useLayoutEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { tools, whmNav } from "@/lib/catalog";
 import type { HTMLAttributes, ReactNode, TdHTMLAttributes, ThHTMLAttributes } from "react";
@@ -62,7 +63,7 @@ export function PageHeader({
             {(description ?? tool?.blurb) && <p className="mt-0.5 max-w-2xl text-[13px] text-muted">{description ?? tool?.blurb}</p>}
           </div>
         </div>
-        {actions && <div className="flex shrink-0 flex-wrap items-center gap-2 sm:flex-nowrap">{actions}</div>}
+        {actions && <div className="flex max-w-full flex-wrap items-center gap-2 sm:shrink-0 sm:flex-nowrap">{actions}</div>}
       </div>
     </div>
   );
@@ -131,7 +132,7 @@ const tones: Record<Tone, string> = {
 
 export function Badge({ tone = "neutral", children }: { tone?: Tone; children: ReactNode }) {
   return (
-    <span className={clsx("inline-flex items-center gap-1 rounded border px-1.5 py-px text-[11.5px] font-medium", tones[tone])}>
+    <span className={clsx("inline-flex items-center gap-1 whitespace-nowrap rounded border px-1.5 py-px text-[11.5px] font-medium", tones[tone])}>
       {children}
     </span>
   );
@@ -196,7 +197,7 @@ export function Meter({ used, limit, format }: { used: number; limit: number; fo
         <span className="font-medium text-ink">{f(used)}</span>
         <span className="text-muted">{limit ? `of ${f(limit)}` : "unlimited"}</span>
       </div>
-      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface2 ring-1 ring-inset ring-[var(--line)]">
+      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-track">
         <div
           className={clsx("h-full rounded-full transition-all", hot ? "bg-bad" : "bg-accent")}
           style={{ width: `${limit ? Math.max(pct, used > 0 ? 2 : 0) : 0}%` }}
@@ -211,10 +212,30 @@ export function Meter({ used, limit, format }: { used: number; limit: number; fo
 
 // ---- table ------------------------------------------------------------------
 
+/** Copies each column's heading onto its cells, for the stacked phone layout. */
+export function useColumnLabels() {
+  const ref = useRef<HTMLTableElement>(null);
+  useLayoutEffect(() => {
+    const table = ref.current;
+    if (!table) return;
+    const heads = Array.from(table.querySelectorAll(":scope > thead th")).map((th) => (th.querySelector(".sr-only, input") ? "" : (th.textContent ?? "").trim()));
+    for (const tr of Array.from(table.querySelectorAll(":scope > tbody > tr"))) {
+      Array.from(tr.children).forEach((td, i) => {
+        // A cell spanning columns, or the actions column, needs no label.
+        const label = td.hasAttribute("colspan") ? "" : heads[i];
+        if (label && label !== "Actions") td.setAttribute("data-label", label);
+        else td.removeAttribute("data-label");
+      });
+    }
+  });
+  return ref;
+}
+
 export function Table({ children, className }: { children: ReactNode; className?: string }) {
+  const ref = useColumnLabels();
   return (
     <div className="relative overflow-x-auto">
-      <table className={clsx("w-full border-collapse text-left text-[13px]", className)}>{children}</table>
+      <table ref={ref} className={clsx("stack w-full border-collapse text-left text-[13px]", className)}>{children}</table>
     </div>
   );
 }

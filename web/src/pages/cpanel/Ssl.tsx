@@ -84,7 +84,7 @@ export default function Ssl() {
                     </Td>
                     <Td className="text-muted">{c ? `${formatDate(c.not_after)} (${daysLeft}d)` : "—"}</Td>
                     <Td>
-                      <div className="flex justify-end gap-2">
+                      <div className="flex flex-wrap justify-end gap-2">
                         <Button size="sm" variant={c ? "secondary" : "primary"} loading={issue.isPending && issue.variables?.id === d.id} onClick={() => issue.mutate(d)}>
                           {c ? "Reissue" : "Get free certificate"}
                         </Button>

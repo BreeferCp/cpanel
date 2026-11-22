@@ -1,9 +1,9 @@
-import { Search } from "lucide-react";
+import { Search, Star } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useGet } from "@/lib/hooks";
 import { formatMB, percent } from "@/lib/format";
-import { availableTools, matchTool, toolGroups } from "@/lib/catalog";
+import { availableTools, matchTool, toolGroups, type Tool } from "@/lib/catalog";
 import type { Account, AccountSample, Usage } from "@/lib/types";
 import { useAccountId, useBase } from "@/state/scope";
 import { usePanel } from "@/state/panel";
@@ -14,22 +14,68 @@ function StatRow({ label, used, limit, fmt }: { label: string; used: number; lim
   const f = fmt ?? String;
   const p = percent(used, limit);
   return (
-    <div className="px-4 py-2.5">
-      <div className="flex items-baseline justify-between gap-2 text-[12.5px]">
-        <span className="text-muted">{label}</span>
-        <span className="tabular-nums">
-          <span className="font-medium text-ink">{f(used)}</span>
-          <span className="text-subtle"> / {limit ? f(limit) : "∞"}</span>
-        </span>
+    <div className="min-w-0 rounded-lg border border-line bg-surface px-3.5 py-3 shadow-card">
+      <div className="truncate text-[12px] text-muted">{label}</div>
+      <div className="mt-0.5 truncate tabular-nums">
+        <span className="text-[18px] font-semibold text-ink">{f(used)}</span>
+        <span className="text-[12px] text-muted"> / {limit ? f(limit) : "∞"}</span>
       </div>
-      <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-surface2">
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-track">
         <div className={`h-full rounded-full ${p >= 90 ? "bg-bad" : "bg-accent"}`} style={{ width: `${limit ? Math.max(p, used ? 2 : 0) : 0}%` }} />
       </div>
     </div>
   );
 }
 
+const DEFAULT_PINS = ["files", "email", "databases", "domains", "ssl", "wordpress"];
+const PINS_KEY = "breefer-pins";
+
+function usePins() {
+  const [pins, setPins] = useState<string[]>(() => {
+    try {
+      const v: unknown = JSON.parse(localStorage.getItem(PINS_KEY) ?? "null");
+      if (Array.isArray(v)) return v.filter((x): x is string => typeof x === "string");
+    } catch {
+      // storage is unavailable or holds junk: use the defaults
+    }
+    return DEFAULT_PINS;
+  });
+  const toggle = (to: string) => {
+    const next = pins.includes(to) ? pins.filter((p) => p !== to) : [...pins, to];
+    setPins(next);
+    try {
+      localStorage.setItem(PINS_KEY, JSON.stringify(next));
+    } catch {
+      // not remembered, still works for this visit
+    }
+  };
+  return { pins, toggle };
+}
+
+function Tile({ tool, to, pinned, onPin }: { tool: Tool; to: string; pinned: boolean; onPin: () => void }) {
+  return (
+    <div className="group relative">
+      <Link to={to} className="flex h-full items-center gap-2.5 rounded-md py-2.5 pl-2.5 pr-7 text-[13px] leading-tight text-ink transition-colors hover:bg-surface2">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent transition-colors group-hover:bg-accent group-hover:text-accent-fg">
+          <tool.icon className="size-4" aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{tool.label}</span>
+      </Link>
+      <button
+        type="button"
+        aria-pressed={pinned}
+        aria-label={`${pinned ? "Remove" : "Add"} ${tool.label} ${pinned ? "from" : "to"} favourites`}
+        onClick={onPin}
+        className={`absolute right-0.5 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded transition-opacity ${pinned ? "text-accent" : "text-subtle opacity-0 focus-visible:opacity-100 group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100"}`}
+      >
+        <Star className="size-3.5" fill={pinned ? "currentColor" : "none"} aria-hidden />
+      </button>
+    </div>
+  );
+}
+
 export default function HostingOverview() {
+  const { pins, toggle } = usePins();
   const aid = useAccountId();
   const base = useBase();
   const panel = usePanel();
@@ -80,26 +126,40 @@ export default function HostingOverview() {
         </div>
       )}
 
-      <div className="grid gap-5 xl:grid-cols-[1fr_300px]">
+      {!q && (
+        <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 2xl:grid-cols-6">
+          <StatRow label="Disk usage" used={u.disk.used} limit={u.disk.limit} fmt={formatMB} />
+          <StatRow label="Bandwidth" used={u.bandwidth.used} limit={u.bandwidth.limit} fmt={formatMB} />
+          <StatRow label="Domains" used={u.domains.used} limit={u.domains.limit} />
+          <StatRow label="Email accounts" used={u.mailboxes.used} limit={u.mailboxes.limit} />
+          <StatRow label="Databases" used={u.databases.used} limit={u.databases.limit} />
+          <StatRow label="Applications" used={u.apps.used} limit={u.apps.limit} />
+        </div>
+      )}
+
+      <div className="grid gap-5 xl:grid-cols-[1fr_280px]">
         <div className="min-w-0 space-y-4">
+          {!q && list.some((t) => pins.includes(t.to)) && (
+            <section className="rounded-lg border border-line bg-surface shadow-card">
+              <h2 className="border-b border-line px-4 py-2.5 text-[12px] font-semibold uppercase tracking-wide text-muted">Favourites</h2>
+              <div className="grid grid-cols-2 gap-px p-1.5 sm:grid-cols-3">
+                {list
+                  .filter((t) => pins.includes(t.to))
+                  .map((t) => (
+                    <Tile key={t.label} tool={t} to={href(t.to)} pinned onPin={() => toggle(t.to)} />
+                  ))}
+              </div>
+            </section>
+          )}
           {toolGroups.map((g) => {
             const tiles = list.filter((t) => t.group === g);
             if (!tiles.length) return null;
             return (
               <section key={g} className="rounded-lg border border-line bg-surface shadow-card">
                 <h2 className="border-b border-line px-4 py-2.5 text-[12px] font-semibold uppercase tracking-wide text-muted">{g}</h2>
-                <div className="grid grid-cols-2 gap-px p-1.5 sm:grid-cols-3 lg:grid-cols-4">
+                <div className="grid grid-cols-2 gap-px p-1.5 sm:grid-cols-3 2xl:grid-cols-4">
                   {tiles.map((t) => (
-                    <Link
-                      key={t.label}
-                      to={href(t.to)}
-                      className="flex items-center gap-2.5 rounded-md px-2.5 py-2.5 text-[13px] leading-tight text-ink transition-colors hover:bg-surface2"
-                    >
-                      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent">
-                        <t.icon className="size-4" aria-hidden />
-                      </span>
-                      <span className="min-w-0 flex-1">{t.label}</span>
-                    </Link>
+                    <Tile key={t.label} tool={t} to={href(t.to)} pinned={pins.includes(t.to)} onPin={() => toggle(t.to)} />
                   ))}
                 </div>
               </section>
@@ -151,16 +211,6 @@ export default function HostingOverview() {
                 </div>
               ))}
             </dl>
-          </Card>
-          <Card title="Statistics" flush>
-            <div className="divide-y divide-[var(--line)]">
-              <StatRow label="Disk usage" used={u.disk.used} limit={u.disk.limit} fmt={formatMB} />
-              <StatRow label="Bandwidth" used={u.bandwidth.used} limit={u.bandwidth.limit} fmt={formatMB} />
-              <StatRow label="Domains" used={u.domains.used} limit={u.domains.limit} />
-              <StatRow label="Email accounts" used={u.mailboxes.used} limit={u.mailboxes.limit} />
-              <StatRow label="Databases" used={u.databases.used} limit={u.databases.limit} />
-              <StatRow label="Applications" used={u.apps.used} limit={u.apps.limit} />
-            </div>
           </Card>
         </aside>
       </div>

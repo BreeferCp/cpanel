@@ -166,7 +166,7 @@ export default function ServerOverview() {
                 </div>
                 <div>
                   <div className="text-muted">Suspended</div>
-                  <div className="font-medium">{s.accounts.suspended} accounts</div>
+                  <div className="font-medium">{s.accounts.suspended} {s.accounts.suspended === 1 ? "account" : "accounts"}</div>
                 </div>
               </div>
             </div>

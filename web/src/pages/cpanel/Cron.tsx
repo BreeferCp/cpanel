@@ -30,18 +30,18 @@ function CronEmail() {
         <ErrorNote error={q.error} />
       ) : (
         <form
-          className="flex flex-wrap items-end gap-3"
+          className="flex flex-col items-start gap-3 sm:flex-row"
           onSubmit={(e) => {
             e.preventDefault();
             save.mutate();
           }}
         >
-          <div className="min-w-0 flex-1">
+          <div className="w-full min-w-0 flex-1">
             <Field label="Email job output to" hint="Leave empty to discard output.">
               {(id) => <Input id={id} type="email" value={edited ?? q.data?.email ?? ""} onChange={(e) => setEdited(e.target.value)} />}
             </Field>
           </div>
-          <Button type="submit" loading={save.isPending} disabled={edited === null}>
+          <Button type="submit" className="sm:mt-[23px]" loading={save.isPending} disabled={edited === null}>
             Save
           </Button>
         </form>

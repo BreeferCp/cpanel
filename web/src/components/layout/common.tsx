@@ -19,7 +19,7 @@ export function UserChip({ subtitle }: { subtitle?: string }) {
       </div>
       <div className="min-w-0 flex-1">
         <div className="truncate text-[13px] font-medium text-ink">{user?.username}</div>
-        <div className="truncate text-[11.5px] capitalize text-muted">{subtitle ?? user?.role}</div>
+        <div className={subtitle ? "truncate text-[11.5px] text-muted" : "truncate text-[11.5px] capitalize text-muted"}>{subtitle ?? user?.role}</div>
       </div>
       <ThemeToggle />
       <IconButton icon={LogOut} label="Sign out" onClick={() => void logout()} />
