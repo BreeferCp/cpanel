@@ -164,30 +164,57 @@ func (s *Server) runAutoSSL(w http.ResponseWriter, r *http.Request) error {
 		writeJSON(w, 202, map[string]any{"queued": 0, "message": "Dry-run: no certificates are requested."})
 		return nil
 	}
-	rows, err := s.db.Query(r.Context(), `SELECT d.id, d.account_id FROM domains d JOIN accounts a ON a.id = d.account_id
-		WHERE a.status = 'active' AND NOT EXISTS (SELECT 1 FROM ssl_certs c WHERE c.domain_id = d.id)`)
+	jobs, err := s.domainsWithoutCert(r.Context())
 	if err != nil {
 		return err
 	}
-	type job struct{ d, a string }
-	var jobs []job
-	for rows.Next() {
-		var j job
-		if rows.Scan(&j.d, &j.a) == nil {
-			jobs = append(jobs, j)
-		}
+	if !s.startAutoSSL(jobs) {
+		return errConflict("AutoSSL is already running")
 	}
-	rows.Close()
+	s.audit(r, "autossl.run", "", true, strconv.Itoa(len(jobs))+" domains")
+	writeJSON(w, 202, map[string]any{"queued": len(jobs), "message": "AutoSSL is running in the background."})
+	return nil
+}
+
+type certJob struct{ domainID, accountID string }
+
+// domainsWithoutCert is random and capped so that domains whose DNS never
+// validates cannot use up Let's Encrypt's order limit on every run.
+func (s *Server) domainsWithoutCert(ctx context.Context) ([]certJob, error) {
+	rows, err := s.db.Query(ctx, `SELECT d.id, d.account_id FROM domains d JOIN accounts a ON a.id = d.account_id
+		WHERE a.status = 'active' AND NOT EXISTS (SELECT 1 FROM ssl_certs c WHERE c.domain_id = d.id)
+		ORDER BY RANDOM() LIMIT 150`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []certJob
+	for rows.Next() {
+		var j certJob
+		if err := rows.Scan(&j.domainID, &j.accountID); err != nil {
+			return nil, err
+		}
+		out = append(out, j)
+	}
+	return out, rows.Err()
+}
+
+// startAutoSSL renews and issues in the background, one run at a time.
+func (s *Server) startAutoSSL(jobs []certJob) bool {
+	if !s.autoSSLBusy.CompareAndSwap(false, true) {
+		return false
+	}
 	go func() {
+		defer s.autoSSLBusy.Store(false)
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
 		defer cancel()
 		s.renewCerts(ctx)
 		for _, j := range jobs {
-			a, err := scanAcct(s.db.QueryRow(ctx, acctSelect+` WHERE a.id = ?`, j.a))
+			a, err := scanAcct(s.db.QueryRow(ctx, acctSelect+` WHERE a.id = ?`, j.accountID))
 			if err != nil {
 				continue
 			}
-			d, err := s.domainOf(ctx, a.ID, j.d)
+			d, err := s.domainOf(ctx, a.ID, j.domainID)
 			if err != nil {
 				continue
 			}
@@ -200,14 +227,12 @@ func (s *Server) runAutoSSL(w http.ResponseWriter, r *http.Request) error {
 				s.log.Warn("autossl", "domain", d.Name, "err", err)
 				continue
 			}
-			if err := s.saveCert(ctx, a, d, "letsencrypt", names, cert); err == nil {
-				_ = s.applyDomain(ctx, a, d)
+			if err := s.saveCert(ctx, a, d, "letsencrypt", names, cert); err != nil {
+				s.log.Warn("autossl: save", "domain", d.Name, "err", err)
 			}
 		}
 	}()
-	s.audit(r, "autossl.run", "", true, strconv.Itoa(len(jobs))+" domains")
-	writeJSON(w, 202, map[string]any{"queued": len(jobs), "message": "AutoSSL is running in the background."})
-	return nil
+	return true
 }
 
 func (s *Server) serverBackups(w http.ResponseWriter, r *http.Request) error {
@@ -394,11 +419,12 @@ func (s *Server) putSSHConfig(w http.ResponseWriter, r *http.Request) error {
 	if c.Port != 22 && (c.Port < 1024 || c.Port > 65535) {
 		return errBadRequest("use port 22 or a port between 1024 and 65535")
 	}
-	if !c.PasswordAuth && c.RootLogin != "no" && !s.cfg.DryRun {
-		// Refuse to lock root out: key login must actually be possible.
-		if keys, _ := s.rootKeys(r.Context()); len(keys) == 0 && c.RootLogin == "prohibit-password" {
-			return errBadRequest("add a root SSH key before turning off password logins")
-		}
+	keys, err := s.rootKeys(r.Context())
+	if err != nil {
+		return err
+	}
+	if !s.canStillLogIn(r.Context(), c, len(keys)) {
+		return errBadRequest("these settings would leave no way to log in: add a root SSH key (and allow key login for root) or give a sudo user a key first")
 	}
 	if s.cfg.DryRun {
 		if err := s.putSetting(r.Context(), "dev_ssh", fmt.Sprintf("%d,%s,%d", b2i(c.PasswordAuth), c.RootLogin, c.Port)); err != nil {
@@ -413,6 +439,10 @@ func (s *Server) putSSHConfig(w http.ResponseWriter, r *http.Request) error {
 		old, _ := os.ReadFile(sshTweaks)
 		if err := s.prov.Runner().WriteFile(sshTweaks, []byte(conf), 0o644); err != nil {
 			return err
+		}
+		// With socket activation /run/sshd only exists while sshd runs, and -t needs it.
+		if _, err := s.prov.Runner().Run(r.Context(), "install", "-d", "-m", "0755", "/run/sshd"); err != nil {
+			s.log.Warn("create /run/sshd", "err", err)
 		}
 		if _, err := s.prov.Runner().Run(r.Context(), "sshd", "-t"); err != nil {
 			_ = s.prov.Runner().WriteFile(sshTweaks, old, 0o644)
@@ -578,8 +608,8 @@ func (s *Server) deleteRootKey(w http.ResponseWriter, r *http.Request) error {
 	if !found {
 		return store.ErrNotFound
 	}
-	if !s.sshConfig(r.Context()).PasswordAuth && len(out) == 0 {
-		return errBadRequest("password logins are off; this is the last key, so removing it would lock root out")
+	if !s.canStillLogIn(r.Context(), s.sshConfig(r.Context()), len(out)) {
+		return errBadRequest("this is the last way to log in, so removing the key would lock you out")
 	}
 	if err := s.writeRootKeys(r.Context(), out); err != nil {
 		return err
@@ -587,6 +617,47 @@ func (s *Server) deleteRootKey(w http.ResponseWriter, r *http.Request) error {
 	s.audit(r, "server.root_key_delete", fp, true, "")
 	w.WriteHeader(http.StatusNoContent)
 	return nil
+}
+
+// canStillLogIn reports whether an administrator can get in over SSH.
+func (s *Server) canStillLogIn(ctx context.Context, c sshConfig, rootKeys int) bool {
+	if c.RootLogin != "no" && rootKeys > 0 {
+		return true
+	}
+	if c.PasswordAuth && c.RootLogin == "yes" {
+		return true
+	}
+	if s.cfg.DryRun {
+		return c.PasswordAuth // the demo server has a sudo user without keys
+	}
+	for _, group := range []string{"sudo", "wheel"} {
+		res, err := s.prov.Runner().Run(ctx, "getent", "group", group)
+		if err != nil {
+			continue
+		}
+		f := strings.Split(strings.TrimSpace(res.Stdout), ":")
+		if len(f) != 4 {
+			continue
+		}
+		for _, u := range strings.Split(f[3], ",") {
+			if u == "" {
+				continue
+			}
+			if c.PasswordAuth {
+				return true
+			}
+			pw, err := s.prov.Runner().Run(ctx, "getent", "passwd", u)
+			if err != nil {
+				continue
+			}
+			if e := strings.Split(strings.TrimSpace(pw.Stdout), ":"); len(e) == 7 {
+				if st, err := os.Stat(e[5] + "/.ssh/authorized_keys"); err == nil && st.Size() > 0 {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // ---- root password -------------------------------------------------------------------

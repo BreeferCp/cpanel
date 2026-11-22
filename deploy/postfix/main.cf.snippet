@@ -4,11 +4,11 @@ smtpd_tls_auth_only = yes
 smtpd_tls_protocols = >=TLSv1.2
 smtp_tls_security_level = may
 
-virtual_mailbox_domains = sqlite:/etc/postfix/breefercp/domains.cf
-virtual_mailbox_maps    = sqlite:/etc/postfix/breefercp/mailboxes.cf
-virtual_alias_maps      = sqlite:/etc/postfix/breefercp/aliases.cf,
-                          sqlite:/etc/postfix/breefercp/lists.cf,
-                          sqlite:/etc/postfix/breefercp/domain_forwards.cf
+virtual_mailbox_domains = proxy:sqlite:/etc/postfix/breefercp/domains.cf
+virtual_mailbox_maps    = proxy:sqlite:/etc/postfix/breefercp/mailboxes.cf
+virtual_alias_maps      = proxy:sqlite:/etc/postfix/breefercp/aliases.cf,
+                          proxy:sqlite:/etc/postfix/breefercp/lists.cf,
+                          proxy:sqlite:/etc/postfix/breefercp/domain_forwards.cf
 virtual_transport       = lmtp:unix:private/dovecot-lmtp
 
 smtpd_sasl_type = dovecot

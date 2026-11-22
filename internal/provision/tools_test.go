@@ -36,7 +36,7 @@ func TestVhostIndexesMimeGzip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"location ^~ /downloads/ {\n        autoindex on;", "gzip_types application/atom+xml", "default_type application/manifest+json;", "default_type model/gltf-binary;"} {
+	for _, want := range []string{"location ^~ /downloads/ {\n        location ~ /\\.(?!well-known) { deny all; return 404; }\n        autoindex on;", "gzip_types application/atom+xml", "default_type application/manifest+json;", "default_type model/gltf-binary;"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
 		}

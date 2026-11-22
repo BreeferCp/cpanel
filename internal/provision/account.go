@@ -37,6 +37,9 @@ func (p *Provisioner) CreateAccount(ctx context.Context, a Account) error {
 	if _, err := p.run.Run(ctx, "setfacl", "-m", "u:"+p.cfg.WebUser+":--x", a.Home); err != nil {
 		return err
 	}
+	if err := p.PrepareDocRoot(ctx, a, filepath.Join(a.Home, "public_html")); err != nil {
+		return err
+	}
 	if err := p.SetLimits(ctx, a); err != nil {
 		return err
 	}
@@ -127,6 +130,9 @@ func (p *Provisioner) DeleteAccount(ctx context.Context, a Account, domains []st
 	_, _ = p.run.Run(ctx, "pkill", "-KILL", "-u", a.SysUser)
 	if _, err := p.run.Run(ctx, "userdel", "--remove", a.SysUser); err != nil {
 		return err
+	}
+	if system.SysUser(a.SysUser) == nil {
+		_, _ = p.run.Run(ctx, "rm", "-rf", "--", LogDir(a))
 	}
 	_ = p.run.Remove(filepath.Join("/etc/systemd/system", fmt.Sprintf("user-%d.slice.d", a.UID), "50-breefer.conf"))
 	return p.ReloadWeb(ctx)

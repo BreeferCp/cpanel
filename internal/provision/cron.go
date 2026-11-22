@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/breefercp/breefercp/internal/system"
 )
@@ -18,12 +19,16 @@ type CronJob struct {
 
 // WriteCron writes /etc/cron.d/breefer-<user>. Jobs run as the account user.
 // Schedule and command are validated so no field can inject extra lines.
-func (p *Provisioner) WriteCron(ctx context.Context, a Account, jobs []CronJob) error {
+func (p *Provisioner) WriteCron(ctx context.Context, a Account, jobs []CronJob, mailTo string) error {
 	if err := system.SysUser(a.SysUser); err != nil {
 		return err
 	}
 	var b bytes.Buffer
 	b.WriteString("# Managed by BreeferCP. Do not edit.\nSHELL=/bin/sh\nPATH=/usr/local/bin:/usr/bin:/bin\n")
+	if mailTo != "" && !CronMailTo(mailTo) {
+		return fmt.Errorf("%w: cron email", system.ErrInvalid)
+	}
+	fmt.Fprintf(&b, "MAILTO=\"%s\"\n", mailTo)
 	for _, j := range jobs {
 		if !j.Enabled {
 			continue
@@ -34,7 +39,7 @@ func (p *Provisioner) WriteCron(ctx context.Context, a Account, jobs []CronJob) 
 		if err := system.OneLine(j.Command, 1024); err != nil {
 			return err
 		}
-		fmt.Fprintf(&b, "%s %s %s\n", j.Schedule, a.SysUser, j.Command)
+		fmt.Fprintf(&b, "%s %s %s\n", strings.Join(strings.Fields(j.Schedule), " "), a.SysUser, j.Command)
 	}
 	return p.run.WriteFile(filepath.Join("/etc/cron.d", "breefer-"+a.SysUser), b.Bytes(), 0o644)
 }

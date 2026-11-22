@@ -416,6 +416,16 @@ func (s *Server) provisionAccount(ctx context.Context, owner *Principal, req Cre
 	if err != nil {
 		return nil, errBadRequest("unknown package")
 	}
+	if err := s.claimDomain(ctx, owner, "", req.Domain); err != nil {
+		return nil, err
+	}
+	// An existing system user must stop this here: the rollback of a failed
+	// useradd runs "userdel --remove" on that name.
+	if !s.cfg.DryRun {
+		if _, err := s.prov.Runner().Run(ctx, "id", "-u", "--", req.Username); err == nil {
+			return nil, errConflict("that username already exists on the server")
+		}
+	}
 	if err := s.checkResellerAllocation(ctx, owner, pk.DiskMB, true); err != nil {
 		return nil, err
 	}

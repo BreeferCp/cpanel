@@ -111,7 +111,7 @@ func featureFor(segs []string) string {
 		return "ip_blocker"
 	case "hotlink":
 		return "hotlink"
-	case "mailboxes", "mail":
+	case "mailboxes", "mail", "mail-usage":
 		return "email"
 	case "mail-aliases", "domain-forwards":
 		return "forwarders"
@@ -165,7 +165,7 @@ func featureFor(segs []string) string {
 		return "php"
 	case "apps":
 		return "apps"
-	case "cron":
+	case "cron", "cron-email":
 		return "cron"
 	case "ssh-keys":
 		return "ssh"
@@ -189,12 +189,23 @@ func (s *Server) disabledFeatures(ctx context.Context, userID string) map[string
 	return out
 }
 
+var nginxOnly = map[string]bool{"protected-dirs": true, "ip-blocks": true, "hotlink": true, "indexes": true, "mime-types": true, "optimize": true}
+
 // featureGate refuses account holders the tools their package's feature
 // list switches off. Administrators acting on an account are not limited.
 func (s *Server) featureGate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p := principalFrom(r.Context())
 		rest, ok := strings.CutPrefix(r.URL.Path, "/api/v1/accounts/")
+		if ok && s.cfg.WebServer == "openlitespeed" && (r.Method == http.MethodPost || r.Method == http.MethodPut) {
+			// The OpenLiteSpeed renderer ignores these. Say so rather than
+			// report a folder as protected when it is not.
+			if segs := strings.Split(rest, "/"); len(segs) > 1 && nginxOnly[segs[1]] {
+				writeJSON(w, 400, map[string]any{"error": map[string]string{"code": "unsupported",
+					"message": "this tool is not supported with OpenLiteSpeed yet"}})
+				return
+			}
+		}
 		if ok && p != nil && p.Role == rbac.User {
 			segs := strings.Split(rest, "/")
 			if f := featureFor(segs[1:]); f != "" && s.disabledFeatures(r.Context(), p.UserID)[f] {

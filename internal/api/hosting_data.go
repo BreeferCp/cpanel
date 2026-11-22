@@ -395,6 +395,9 @@ func (s *Server) createMailbox(w http.ResponseWriter, r *http.Request) error {
 	if err := s.within(r.Context(), "mailboxes", a.ID, a.pkg.MaxMailboxes, "mailboxes"); err != nil {
 		return err
 	}
+	if err := s.notAList(r.Context(), req.LocalPart+"@"+d.Name); err != nil {
+		return err
+	}
 	hash, err := auth.HashPassword(req.Password)
 	if err != nil {
 		return err
@@ -509,18 +512,23 @@ func (s *Server) createAlias(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	req.LocalPart = strings.ToLower(strings.TrimSpace(req.LocalPart))
-	if req.LocalPart != "*" { // catch-all
-		if err := system.LocalPart(req.LocalPart); err != nil {
-			return err
-		}
+	if req.LocalPart == "*" {
+		// It has its own tool and feature-list switch.
+		return errBadRequest("use Default Address to catch mail for unknown addresses")
+	}
+	if err := system.LocalPart(req.LocalPart); err != nil {
+		return err
 	}
 	d, err := s.domainOf(r.Context(), a.ID, req.DomainID)
 	if err != nil {
 		return errBadRequest("choose one of your domains")
 	}
 	dest := strings.ToLower(strings.TrimSpace(req.Destination))
-	if !strings.Contains(dest, "@") || strings.ContainsAny(dest, " ,;\r\n") {
+	if !provision.ValidAddress(dest) {
 		return errBadRequest("enter one valid destination address")
+	}
+	if err := s.notAList(r.Context(), req.LocalPart+"@"+d.Name); err != nil {
+		return err
 	}
 	m := mailAlias{ID: ids.New(), Source: req.LocalPart + "@" + d.Name, Destination: dest}
 	if _, err := s.db.Exec(r.Context(), `INSERT INTO mail_aliases (id, account_id, source, destination, created_at) VALUES (?,?,?,?,?)`,
@@ -623,10 +631,25 @@ func (s *Server) createApp(w http.ResponseWriter, r *http.Request) error {
 	if err := s.within(r.Context(), "apps", a.ID, a.pkg.MaxApps, "applications"); err != nil {
 		return err
 	}
+	if !provision.ValidAppName(req.Name) {
+		return errBadRequest("app names use lowercase letters, digits and hyphens, starting with a letter")
+	}
+	// Apps get ports in their own range: a domain proxies to this port, so any
+	// other value would publish a local service or another customer's app.
 	if req.Port == 0 {
-		if err := s.db.QueryRow(r.Context(), `SELECT COALESCE(MAX(port), 29999) + 1 FROM apps`).Scan(&req.Port); err != nil {
+		if err := s.db.QueryRow(r.Context(), `SELECT COALESCE(MAX(port), 30999) + 1 FROM apps WHERE port BETWEEN 31000 AND 39999`).Scan(&req.Port); err != nil {
 			return err
 		}
+	}
+	if req.Port < 31000 || req.Port > 39999 {
+		return errBadRequest("app ports are between 31000 and 39999")
+	}
+	var used int
+	if err := s.db.QueryRow(r.Context(), `SELECT COUNT(*) FROM apps WHERE port = ?`, req.Port).Scan(&used); err != nil {
+		return err
+	}
+	if used > 0 {
+		return errConflict("that port is already in use")
 	}
 	dir := path.Join(a.HomeDir, "apps", req.Name)
 	papp := provision.App{Name: req.Name, Runtime: req.Runtime, Version: req.Version, Command: req.Command, Dir: dir, Image: req.Image, Port: req.Port, Env: req.Env}
@@ -641,7 +664,7 @@ func (s *Server) createApp(w http.ResponseWriter, r *http.Request) error {
 		VALUES (?,?,NULLIF(?, ''),?,?,?,?,?,?,?,?,?)`, req.ID, a.ID, req.DomainID, req.Name, req.Runtime, req.Image, req.Port, "{}", req.Status, req.Version, req.Command, time.Now().Unix()); err != nil {
 		return err
 	}
-	if _, err := s.prov.Runner().Run(r.Context(), "install", "-d", "-m", "0750", "-o", a.SysUser, "-g", a.SysUser, dir); err != nil {
+	if err := s.prov.MkdirAsUser(r.Context(), a.prov(), dir, "0750"); err != nil {
 		_, _ = s.db.Exec(context.WithoutCancel(r.Context()), `DELETE FROM apps WHERE id = ?`, req.ID)
 		return err
 	}

@@ -18,8 +18,6 @@ import (
 	"github.com/breefercp/breefercp/internal/ids"
 	"github.com/breefercp/breefercp/internal/provision"
 	"github.com/breefercp/breefercp/internal/rbac"
-	"github.com/breefercp/breefercp/internal/store"
-	"github.com/breefercp/breefercp/internal/system"
 )
 
 func (s *Server) extraRoutes(mux *http.ServeMux) {
@@ -485,31 +483,20 @@ func (s *Server) readLog(w http.ResponseWriter, r *http.Request) error {
 	}
 	kind := r.URL.Query().Get("kind")
 	domainName := r.URL.Query().Get("domain")
-	var rel string
-	switch kind {
-	case "php":
-		rel = "logs/php-error.log"
-	case "access", "error":
-		if err := system.Domain(domainName); err != nil {
-			return err
-		}
-		var n int
-		if err := s.db.QueryRow(r.Context(), `SELECT COUNT(*) FROM domains WHERE account_id = ? AND name = ?`, a.ID, domainName).Scan(&n); err != nil {
-			return err
-		}
-		if n == 0 {
-			return store.ErrNotFound
-		}
-		rel = "logs/" + domainName + "." + kind + ".log"
-	default:
-		return errBadRequest("kind must be access, error or php")
+	rel, err := s.logFile(r.Context(), a, kind, domainName)
+	if err != nil {
+		return err
 	}
 	lines, _ := strconv.Atoi(r.URL.Query().Get("lines"))
 	if lines <= 0 || lines > 2000 {
 		lines = 200
 	}
-	jail, err := files.Open(a.HomeDir, a.SysUID, a.SysUID)
+	jail, err := openLogJail(a, rel)
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			writeJSON(w, 200, map[string]any{"lines": []string{}})
+			return nil
+		}
 		return fsErr(err)
 	}
 	defer jail.Close()

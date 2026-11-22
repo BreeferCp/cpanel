@@ -32,6 +32,7 @@ import SpamFilters from "@/pages/cpanel/SpamFilters";
 import RemoteMysql from "@/pages/cpanel/RemoteMysql";
 import { DirectoryPrivacy, Hotlink, IpBlocker } from "@/pages/cpanel/WebProtection";
 import { Deliverability, DefaultAddress, EmailAccounts, EmailFilters, EmailRouting, Forwarders, MailingLists, TrackDelivery, Webmail } from "@/pages/cpanel/EmailTools";
+import { AddressImporter, EmailDiskUsage } from "@/pages/cpanel/MailAdmin";
 import { Bandwidth, Errors, RawAccess, ResourceUsage, Visitors } from "@/pages/cpanel/Metrics";
 import { Aliases, ContactInfo, DatabaseWizard, DynamicDns, Indexes, MimeTypes, Optimize, PhpMyAdmin, Subdomains, TrackDns } from "@/pages/cpanel/SiteTools";
 import ServerOverview from "@/pages/whm/ServerOverview";
@@ -66,6 +67,8 @@ const hostingRoutes = (
     <Route path="remote-mysql" element={<RemoteMysql />} />
     <Route path="email" element={<EmailAccounts />} />
     <Route path="forwarders" element={<Forwarders />} />
+    <Route path="address-importer" element={<AddressImporter />} />
+    <Route path="email-disk-usage" element={<EmailDiskUsage />} />
     <Route path="email-routing" element={<EmailRouting />} />
     <Route path="default-address" element={<DefaultAddress />} />
     <Route path="mailing-lists" element={<MailingLists />} />

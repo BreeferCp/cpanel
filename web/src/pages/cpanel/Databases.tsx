@@ -1,4 +1,4 @@
-import { Database as DbIcon, ExternalLink, KeyRound, Plus, Trash2, UserPlus } from "lucide-react";
+import { Database as DbIcon, ExternalLink, KeyRound, Plus, Stethoscope, Trash2, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { api } from "@/lib/api";
 import { formatMB } from "@/lib/format";
@@ -58,6 +58,11 @@ export default function Databases() {
   // Single sign-on: the panel mints a short-lived database user for this session.
   const pma = useMutate(() => api.post<{ url: string }>(`/accounts/${aid}/phpmyadmin`), {
     onSuccess: (r) => window.open(r.url, "_blank", "noopener"),
+  });
+
+  const [report, setReport] = useState<{ id: string; name: string; tables: { table: string; status: string; ok: boolean }[] } | null>(null);
+  const maintain = useMutate((v: { id: string; name: string; action: "check" | "repair" }) => api.post<{ tables: { table: string; status: string; ok: boolean }[] }>(`${dbKey}/${v.id}/maintenance`, { action: v.action }), {
+    onSuccess: (r, v) => setReport({ id: v.id, name: v.name, tables: r.tables }),
   });
 
   const userName = (id: string) => users.data?.find((u) => u.id === id)?.name ?? id;
@@ -137,7 +142,10 @@ export default function Databases() {
                       </div>
                     </Td>
                     <Td>
+                      <div className="flex justify-end">
+                      <IconButton icon={Stethoscope} label={`Check ${d.name}`} onClick={() => maintain.mutate({ id: d.id, name: d.name, action: "check" })} />
                       <IconButton icon={Trash2} label={`Delete ${d.name}`} onClick={() => setDel({ kind: "db", id: d.id, name: d.name })} />
+                      </div>
                     </Td>
                   </Tr>
                 ))}
@@ -284,6 +292,33 @@ export default function Databases() {
         <Field label="New password">
           {(id) => <Input id={id} type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" autoFocus />}
         </Field>
+      </Modal>
+
+      <Modal
+        open={!!report}
+        onClose={() => setReport(null)}
+        title={`Table check: ${report?.name}`}
+        footer={
+          <>
+            <Button onClick={() => setReport(null)}>Close</Button>
+            <Button variant="primary" loading={maintain.isPending} disabled={!report?.tables.length} onClick={() => report && maintain.mutate({ id: report.id, name: report.name, action: "repair" })}>
+              Repair tables
+            </Button>
+          </>
+        }
+      >
+        {report?.tables.length ? (
+          <ul className="max-h-80 space-y-2 overflow-y-auto">
+            {report.tables.map((t) => (
+              <li key={t.table} className="flex items-start justify-between gap-3 text-[13px]">
+                <Mono className="break-all text-ink">{t.table}</Mono>
+                <span className={t.ok ? "text-muted" : "font-medium text-ink"}>{t.status}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-[13px] text-muted">This database has no tables.</p>
+        )}
       </Modal>
 
       <ConfirmDialog

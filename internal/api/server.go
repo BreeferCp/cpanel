@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/breefercp/breefercp/internal/config"
@@ -21,12 +22,13 @@ import (
 
 // Server wires the HTTP surface to the store and provisioner.
 type Server struct {
-	cfg     config.Config
-	db      *store.Store
-	prov    *provision.Provisioner
-	mariadb *provision.MariaDB
-	log     *slog.Logger
-	trusted []*net.IPNet
+	autoSSLBusy atomic.Bool
+	cfg         config.Config
+	db          *store.Store
+	prov        *provision.Provisioner
+	mariadb     *provision.MariaDB
+	log         *slog.Logger
+	trusted     []*net.IPNet
 
 	loginLimit *rateLimiter
 	apiLimit   *rateLimiter
@@ -160,6 +162,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	s.wpToolkitRoutes(mux)
 	s.updateRoutes(mux)
 	s.emailToolRoutes(mux)
+	s.moreToolRoutes(mux)
 	s.siteToolRoutes(mux)
 	s.whmMoreRoutes(mux)
 }

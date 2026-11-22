@@ -63,11 +63,11 @@ func TestCreateAccountCommands(t *testing.T) {
 
 func TestCronRejectsInjectedSchedule(t *testing.T) {
 	p := newTestProv()
-	err := p.WriteCron(context.Background(), testAcct(), []CronJob{{Schedule: "* * * * * root", Command: "id", Enabled: true}})
+	err := p.WriteCron(context.Background(), testAcct(), []CronJob{{Schedule: "* * * * * root", Command: "id", Enabled: true}}, "")
 	if err == nil {
 		t.Fatal("6-field schedule must be rejected")
 	}
-	err = p.WriteCron(context.Background(), testAcct(), []CronJob{{Schedule: "0 * * * *", Command: "id\n* * * * * root rm -rf /", Enabled: true}})
+	err = p.WriteCron(context.Background(), testAcct(), []CronJob{{Schedule: "0 * * * *", Command: "id\n* * * * * root rm -rf /", Enabled: true}}, "")
 	if err == nil {
 		t.Fatal("multi-line command must be rejected")
 	}

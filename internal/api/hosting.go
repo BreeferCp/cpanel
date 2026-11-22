@@ -267,6 +267,9 @@ func (s *Server) addDomain(w http.ResponseWriter, r *http.Request) error {
 			return errBadRequest("a subdomain must belong to one of your domains")
 		}
 	}
+	if err := s.claimDomain(r.Context(), principalFrom(r.Context()), a.ID, req.Name); err != nil {
+		return err
+	}
 	if err := s.within(r.Context(), "domains", a.ID, a.pkg.MaxDomains, "domains"); err != nil {
 		return err
 	}
@@ -281,7 +284,7 @@ func (s *Server) addDomain(w http.ResponseWriter, r *http.Request) error {
 	}
 	pa := a.prov()
 	rollback := func() { _, _ = s.db.Exec(context.WithoutCancel(r.Context()), `DELETE FROM domains WHERE id = ?`, d.ID) }
-	if _, err := s.prov.Runner().Run(r.Context(), "install", "-d", "-m", "0755", "-o", a.SysUser, "-g", a.SysUser, d.DocRoot); err != nil {
+	if err := s.prov.PrepareDocRoot(r.Context(), pa, d.DocRoot); err != nil {
 		rollback()
 		return err
 	}
@@ -313,6 +316,9 @@ func safeDocRoot(home, requested, name string) (string, error) {
 	clean := path.Clean(rel)
 	if clean == ".." || strings.HasPrefix(clean, "../") || clean == "." {
 		return "", errBadRequest("document root must stay inside your home directory")
+	}
+	if !provision.ConfigPath(clean) {
+		return "", errBadRequest("document root may use letters, digits and / . _ - + @ ~")
 	}
 	return path.Join(home, clean), nil
 }
@@ -670,7 +676,11 @@ func (s *Server) syncCron(ctx context.Context, a *acct) error {
 	for i, j := range jobs {
 		pj[i] = provision.CronJob{Schedule: j.Schedule, Command: j.Command, Enabled: j.Enabled}
 	}
-	return s.prov.WriteCron(ctx, a.prov(), pj)
+	var mailTo string
+	if err := s.db.QueryRow(ctx, `SELECT cron_email FROM accounts WHERE id = ?`, a.ID).Scan(&mailTo); err != nil {
+		return err
+	}
+	return s.prov.WriteCron(ctx, a.prov(), pj, mailTo)
 }
 
 func (s *Server) listCron(w http.ResponseWriter, r *http.Request) error {
@@ -811,12 +821,7 @@ func (s *Server) syncSSHKeys(ctx context.Context, a *acct) error {
 	if err := rows.Err(); err != nil {
 		return err
 	}
-	file := path.Join(a.HomeDir, ".ssh", "authorized_keys")
-	if err := s.prov.Runner().WriteFile(file, []byte(b.String()), 0o600); err != nil {
-		return err
-	}
-	_, err = s.prov.Runner().Run(ctx, "chown", a.SysUser+":"+a.SysUser, file)
-	return err
+	return s.prov.WriteAuthorizedKeys(ctx, a.prov(), b.String())
 }
 
 func (s *Server) addSSHKey(w http.ResponseWriter, r *http.Request) error {

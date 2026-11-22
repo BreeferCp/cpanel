@@ -84,7 +84,7 @@ func ValidateHotlink(h Hotlink) error {
 		return fmt.Errorf("%w: list at least one file extension", system.ErrInvalid)
 	}
 	for _, e := range h.Extensions {
-		if !reExt.MatchString(e) {
+		if !reExt.MatchString(e) || reservedExt[e] {
 			return fmt.Errorf("%w: extension %q (use letters and digits, without the dot)", system.ErrInvalid, e)
 		}
 	}

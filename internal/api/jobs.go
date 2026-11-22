@@ -18,12 +18,13 @@ func (s *Server) RunJobs(ctx context.Context) {
 	// Run once shortly after start so a fresh install is not idle for hours.
 	time.AfterFunc(30*time.Second, func() { s.collectUsage(ctx) })
 	go s.collectMetrics(ctx)
+	go s.upgradeVhosts(ctx)
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-renew.C:
-			s.renewCerts(ctx)
+			s.scheduledAutoSSL(ctx)
 		case <-usage.C:
 			s.collectUsage(ctx)
 		case <-housekeeping.C:
@@ -33,6 +34,62 @@ func (s *Server) RunJobs(ctx context.Context) {
 			s.autoUpdateTick(ctx)
 			s.wpAutoUpdateTick(ctx)
 			s.quotaNotices(ctx)
+		}
+	}
+}
+
+func (s *Server) scheduledAutoSSL(ctx context.Context) {
+	if s.cfg.DryRun {
+		s.renewCerts(ctx)
+		return
+	}
+	jobs, err := s.domainsWithoutCert(ctx)
+	if err != nil {
+		s.log.Error("autossl: query", "err", err)
+	}
+	s.startAutoSSL(jobs) // renews even when the list is empty
+}
+
+// vhostLayout is bumped when a fix only takes effect once vhosts are rewritten.
+const vhostLayout = "2"
+
+// upgradeVhosts rewrites every active account's vhosts once per layout.
+func (s *Server) upgradeVhosts(ctx context.Context) {
+	if s.cfg.DryRun || s.setting(ctx, "vhost_layout") == vhostLayout {
+		return
+	}
+	rows, err := s.db.Query(ctx, `SELECT id FROM accounts WHERE status = 'active'`)
+	if err != nil {
+		s.log.Error("vhost upgrade", "err", err)
+		return
+	}
+	var list []string
+	for rows.Next() {
+		var id string
+		if rows.Scan(&id) == nil {
+			list = append(list, id)
+		}
+	}
+	rows.Close()
+	ok := rows.Err() == nil
+	for _, id := range list {
+		a, err := scanAcct(s.db.QueryRow(ctx, acctSelect+` WHERE a.id = ?`, id))
+		if err == nil {
+			err = s.rewriteVhosts(ctx, a)
+		}
+		if err == nil {
+			if e := s.prov.PrepareDocRoot(ctx, a.prov(), a.HomeDir+"/public_html"); e != nil {
+				s.log.Warn("document root permissions", "account", id, "err", e)
+			}
+		}
+		if err != nil {
+			ok = false
+			s.log.Error("vhost upgrade", "account", id, "err", err)
+		}
+	}
+	if ok {
+		if err := s.putSetting(ctx, "vhost_layout", vhostLayout); err != nil {
+			s.log.Error("vhost upgrade", "err", err)
 		}
 	}
 }

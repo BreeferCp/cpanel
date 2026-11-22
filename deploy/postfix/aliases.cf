@@ -1,3 +1,6 @@
 dbpath = /var/lib/breefercp/breefercp.db
-# An exact alias wins over a catch-all (*@domain).
-query = SELECT destination FROM mail_aliases WHERE source = '%s' OR source = '*@%d' ORDER BY (source = '%s') DESC LIMIT 1
+# A forwarder also keeps a copy when the address is a mailbox. The catch-all
+# (*@domain) only gets addresses that nothing else handles.
+# Use %u@%d, never %s: when Postfix retries with "@domain", %u is empty and the
+# query is suppressed. With %s that retry would send every mailbox to the catch-all.
+query = SELECT destination FROM mail_aliases WHERE source = '%u@%d' UNION SELECT address FROM mailboxes WHERE address = '%u@%d' AND active = 1 AND EXISTS (SELECT 1 FROM mail_aliases WHERE source = '%u@%d') UNION SELECT destination FROM mail_aliases WHERE source = '*@%d' AND NOT EXISTS (SELECT 1 FROM mail_aliases WHERE source = '%u@%d') AND NOT EXISTS (SELECT 1 FROM mailboxes WHERE address = '%u@%d') AND NOT EXISTS (SELECT 1 FROM mailing_lists WHERE address = '%u@%d') AND NOT EXISTS (SELECT 1 FROM mail_domain_forwards WHERE domain = '%d') AND EXISTS (SELECT 1 FROM domains WHERE name = '%d' AND mail_routing = 'local')

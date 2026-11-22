@@ -17,7 +17,11 @@ RestartSec=3
 LimitNOFILE=65536
 
 NoNewPrivileges=no
-ProtectSystem=full
+# Not "full" or "strict": they make /etc read-only, where the panel writes
+# users and service config, and ReadWritePaths cannot lift that for the same
+# path. "yes" protects /usr and /boot; updates need the two subpaths below.
+ProtectSystem=yes
+ReadWritePaths=-/usr/local -/usr/share/breefercp
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectControlGroups=yes

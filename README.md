@@ -86,8 +86,8 @@ More in [docs/images](docs/images).
 | Home | Tool groups with instant search (press `/`), general information, usage statistics, 24-hour CPU and memory charts, provider announcements |
 | Files | File manager (upload, edit, rename, copy, chmod, zip/unzip, download), disk usage, **FTP accounts** (FTPS, chrooted, per-account quota), backups with restore, **Git version control** (clone, pull, push over SSH) |
 | Domains | Domains, **Subdomains**, **Aliases**, redirects (301/302/307/308), DNS zone editor with **DNSSEC**, **Dynamic DNS** (dyndns-compatible update URL), SSL (Let's Encrypt or own certificate) |
-| Email | **Email Accounts** (quota, suspend, connect devices, bulk actions), **Forwarders** and **domain forwarders**, **Email Routing** (local or remote MX), **Default Address** (catch-all), **Mailing Lists** (distribution lists), **Email Filters** (global and per account, ordered, with a filter tester), **Track Delivery** (Postfix log search), **Email Deliverability** (SPF, DKIM, DMARC, MX and reverse DNS checks with one-click repair), **autoresponders**, **spam filters**, webmail |
-| Databases | MariaDB databases, users and grants, **Database Wizard**, phpMyAdmin single sign-on, **Remote MySQL** hosts |
+| Email | **Email Accounts** (quota, suspend, connect devices, bulk actions), **Forwarders** and **domain forwarders**, **Email Routing** (local or remote MX), **Default Address** (catch-all), **Mailing Lists** (distribution lists), **Email Filters** (global and per account, ordered, with a filter tester), **Track Delivery** (Postfix log search), **Email Deliverability** (SPF, DKIM, DMARC, MX and reverse DNS checks with one-click repair), **autoresponders**, **spam filters**, **Address Importer** (CSV), **Email Disk Usage**, webmail |
+| Databases | MariaDB databases, users and grants, **Database Wizard**, check and repair tables, phpMyAdmin single sign-on, **Remote MySQL** hosts |
 | Metrics | **Visitors** (latest hits, top pages, visitors and referrers), **Errors**, **Bandwidth** per domain per day, **Raw Access** log downloads, **Resource Usage** (CPU, memory, processes vs. limits) |
 | Software | One-click app installer (WordPress, Drupal, Nextcloud, Matomo, Grav, DokuWiki, Laravel); **WordPress Toolkit** (see below); **MultiPHP Manager** and **MultiPHP INI Editor**; **Optimize Website** (gzip); Node.js, Python and Ruby apps; Docker |
 | Security | SSL/TLS, **Directory Privacy** (password-protected folders), **IP Blocker**, **Hotlink Protection**, SSH keys |
@@ -180,7 +180,7 @@ Not done yet:
 
 1. **Live-server validation** of every provisioner and of the installer on real Debian and Ubuntu hosts. OpenLiteSpeed support is the least proven. Mail filtering (Rspamd and Sieve, including the new email filters), mailing lists, domain forwarders and email routing (Postfix SQLite maps), FTP, DNSSEC, SSH settings and the WordPress toolkit's clone, push and restore commands have unit tests for their generated configuration and commands, but have not run against real services yet.
 2. **Multi-node clusters:** PostgreSQL and `node_id` exist, but the node agent and scheduler are not written.
-3. **Account transfer** from cPanel (`cpmove` import) and other panels. Off-site backup targets (S3/SFTP).
+3. **Account transfer** from cPanel (`cpmove` import) and other panels. Off-site backup targets (S3/SFTP). Monthly bandwidth accounting from web logs (so bandwidth limits and warning emails do not work yet).
 4. Virus scanning (ClamAV), ModSecurity/WAF, Leech Protection, IP address manager, EasyApache-style module management, mailing-list archives and subscription pages (lists are distribution lists only), sub-users (cPanel User Manager), notification emails other than disk and bandwidth.
 5. Translations and an OpenAPI document.
 6. An independent security review before production use.

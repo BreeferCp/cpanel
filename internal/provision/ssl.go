@@ -117,6 +117,12 @@ func (p *Provisioner) solveHTTP01(ctx context.Context, cl *acme.Client, authzURL
 	if err := os.WriteFile(file, []byte(resp), 0o644); err != nil {
 		return err
 	}
+	// The service runs with UMask=0007, and nginx has to read all three.
+	for path, mode := range map[string]os.FileMode{filepath.Dir(webroot): 0o755, webroot: 0o755, file: 0o644} {
+		if err := os.Chmod(path, mode); err != nil {
+			return err
+		}
+	}
 	defer os.Remove(file)
 	if _, err := cl.Accept(ctx, chal); err != nil {
 		return err

@@ -18,6 +18,38 @@ const PRESETS: [string, string][] = [
   ["Every month (1st, 04:00)", "0 4 1 * *"],
 ];
 
+function CronEmail() {
+  const aid = useAccountId();
+  const key = `/accounts/${aid}/cron-email`;
+  const q = useGet<{ email: string }>(key);
+  const [edited, setEdited] = useState<string | null>(null);
+  const save = useMutate(() => api.put(key, { email: edited }), { invalidate: [key], success: "Cron email saved", onSuccess: () => setEdited(null) });
+  return (
+    <Card title="Cron email" className="mb-5">
+      {q.error ? (
+        <ErrorNote error={q.error} />
+      ) : (
+        <form
+          className="flex flex-wrap items-end gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            save.mutate();
+          }}
+        >
+          <div className="min-w-0 flex-1">
+            <Field label="Email job output to" hint="Leave empty to discard output.">
+              {(id) => <Input id={id} type="email" value={edited ?? q.data?.email ?? ""} onChange={(e) => setEdited(e.target.value)} />}
+            </Field>
+          </div>
+          <Button type="submit" loading={save.isPending} disabled={edited === null}>
+            Save
+          </Button>
+        </form>
+      )}
+    </Card>
+  );
+}
+
 export default function Cron() {
   const aid = useAccountId();
   const key = `/accounts/${aid}/cron`;
@@ -48,6 +80,7 @@ export default function Cron() {
           </Button>
         }
       />
+      <CronEmail />
       <Card flush>
         {q.isLoading ? (
           <Loading />

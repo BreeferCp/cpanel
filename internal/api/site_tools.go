@@ -592,15 +592,27 @@ func (s *Server) logFile(ctx context.Context, a *acct, kind, domainName string) 
 		if n == 0 {
 			return "", store.ErrNotFound
 		}
-		return "logs/" + domainName + "." + kind + ".log", nil
+		return domainName + "." + kind + ".log", nil
 	}
 	return "", errBadRequest("kind must be access, error or php")
 }
 
-// tailFile reads up to max bytes from the end of a file in the home jail.
+// openLogJail opens the directory a path from logFile is relative to: the
+// home for PHP's log, the root-owned log directory for the web server's.
+func openLogJail(a *acct, rel string) (*files.FS, error) {
+	if strings.HasPrefix(rel, "logs/") {
+		return files.Open(a.HomeDir, a.SysUID, a.SysUID)
+	}
+	return files.Open(provision.LogDir(a.prov()), -1, -1)
+}
+
+// tailFile reads up to max bytes from the end of a log.
 func tailFile(a *acct, rel string, max int64) ([]byte, error) {
-	jail, err := files.Open(a.HomeDir, a.SysUID, a.SysUID)
+	jail, err := openLogJail(a, rel)
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	defer jail.Close()
@@ -697,7 +709,7 @@ func demoAccessLog(domain string, days int) []byte {
 }
 
 func (s *Server) accessLogOf(a *acct, domain string, max int64) []byte {
-	data, err := tailFile(a, "logs/"+domain+".access.log", max)
+	data, err := tailFile(a, domain+".access.log", max)
 	if (err != nil || len(data) == 0) && s.cfg.DryRun {
 		return demoAccessLog(domain, 14)
 	}
@@ -937,7 +949,7 @@ func (s *Server) quotaNotices(ctx context.Context) {
 		return
 	}
 	type row struct {
-		uid, user              string
+		uid, user                string
 		disk, diskMax, bw, bwMax int
 	}
 	var list []row

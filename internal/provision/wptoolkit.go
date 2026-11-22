@@ -233,7 +233,8 @@ func (p *Provisioner) WPBackup(ctx context.Context, a Account, dir, db, dest str
 	if _, err := p.run.Run(ctx, "install", "-d", "-m", "0700", dest); err != nil {
 		return err
 	}
-	if _, err := p.run.Run(ctx, "tar", "-czf", filepath.Join(dest, "files.tar.gz"), "-C", dir, "."); err != nil {
+	// tar reads as the account (dir may be a symlink); root writes the archive.
+	if err := p.run.RunToFile(ctx, filepath.Join(dest, "files.tar.gz"), "runuser", "-u", a.SysUser, "--", "tar", "-czf", "-", "-C", dir, "."); err != nil {
 		return err
 	}
 	if db != "" {

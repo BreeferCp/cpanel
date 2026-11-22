@@ -107,9 +107,8 @@ server {
 {{- end}}
 server {
 {{- if .CertPath}}
-    listen 443 ssl;
-    listen [::]:443 ssl;
-    http2 on;
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
     ssl_certificate {{.CertPath}};
     ssl_certificate_key {{.KeyPath}};
     ssl_protocols TLSv1.2 TLSv1.3;
@@ -126,6 +125,8 @@ server {
     access_log {{.LogDir}}/{{.Domain}}.access.log;
     error_log  {{.LogDir}}/{{.Domain}}.error.log warn;
     server_tokens off;
+    # A customer's symlink must not lead nginx into another account's files.
+    disable_symlinks if_not_owner;
     client_max_body_size 256m;
 
     add_header X-Content-Type-Options "nosniff" always;
@@ -183,7 +184,12 @@ server {
     location ~* \.({{.Ext}})$ { types { } default_type {{.Type}}; }
 {{- end}}
 {{- range .IndexV}}
-    location ^~ {{.}} {
+    location ^~ {{.Path}} {
+{{- with .Auth}}
+        auth_basic "{{.Realm}}";
+        auth_basic_user_file {{.File}};
+{{- end}}
+        location ~ /\.(?!well-known) { deny all; return 404; }
         autoindex on;
         autoindex_exact_size off;
         try_files $uri $uri/ =404;
@@ -200,6 +206,7 @@ server {
     location ^~ {{.Path}} {
         auth_basic "{{.Realm}}";
         auth_basic_user_file {{.File}};
+        location ~ /\.(?!well-known) { deny all; return 404; }
 {{- if .Autoindex}}
         autoindex on;
 {{- end}}
@@ -239,10 +246,17 @@ type vhostView struct {
 	Socket     string
 	HotlinkV   *hotlinkView
 	ProtectedV []protectedView
-	IndexV     []string
+	IndexV     []indexView
 	RootIndex  bool
 	MimeV      []mimeView
 	GzipTypes  string
+}
+
+// indexView is a listed folder. ^~ locations inherit nothing from one
+// another, so it carries the password of the protected folder enclosing it.
+type indexView struct {
+	Path string
+	Auth *protectedView
 }
 
 type protectedView struct {
@@ -269,6 +283,11 @@ func RenderVhost(v Vhost, a Account, acmeRoot string) (string, error) {
 	if v.DocRoot == "" {
 		v.DocRoot = filepath.ToSlash(filepath.Join(a.Home, "public_html"))
 	}
+	for _, p := range []string{v.DocRoot, v.ErrorDir} {
+		if p != "" && !ConfigPath(p) {
+			return "", fmt.Errorf("%w: path has characters that are not allowed", system.ErrInvalid)
+		}
+	}
 	for _, r := range v.Redirects {
 		if err := ValidateRedirect(r); err != nil {
 			return "", err
@@ -285,7 +304,7 @@ func RenderVhost(v Vhost, a Account, acmeRoot string) (string, error) {
 	view := vhostView{
 		Vhost:    v,
 		ACMERoot: acmeRoot,
-		LogDir:   filepath.ToSlash(filepath.Join(a.Home, "logs")),
+		LogDir:   LogDir(a),
 		Socket:   fpmSocket(a.SysUser, v.PHP),
 	}
 	view.DenyIPs = make([]string, len(v.DenyIPs))
@@ -295,6 +314,20 @@ func RenderVhost(v Vhost, a Account, acmeRoot string) (string, error) {
 			return "", err
 		}
 		view.DenyIPs[i] = c
+	}
+	if v.Hotlink != nil {
+		// Script extensions saved by older versions are dropped, not rendered.
+		h := *v.Hotlink
+		h.Extensions = nil
+		for _, e := range v.Hotlink.Extensions {
+			if !reservedExt[e] {
+				h.Extensions = append(h.Extensions, e)
+			}
+		}
+		v.Hotlink = &h
+		if len(h.Extensions) == 0 {
+			v.Hotlink = nil
+		}
 	}
 	if v.Hotlink != nil {
 		if err := ValidateHotlink(*v.Hotlink); err != nil {
@@ -332,7 +365,13 @@ func RenderVhost(v Vhost, a Account, acmeRoot string) (string, error) {
 		if i, ok := protected[p]; ok {
 			view.ProtectedV[i].Autoindex = true
 		} else if !seen[p] {
-			view.IndexV = append(view.IndexV, p)
+			iv := indexView{Path: p}
+			for i, pv := range view.ProtectedV {
+				if strings.HasPrefix(p, pv.Path) && (iv.Auth == nil || len(pv.Path) > len(iv.Auth.Path)) {
+					iv.Auth = &view.ProtectedV[i]
+				}
+			}
+			view.IndexV = append(view.IndexV, iv)
 		}
 		seen[p] = true
 	}
@@ -356,6 +395,9 @@ func RenderVhost(v Vhost, a Account, acmeRoot string) (string, error) {
 
 // WriteVhost renders, validates with nginx -t and activates a vhost.
 func (p *Provisioner) WriteVhost(ctx context.Context, v Vhost, a Account) error {
+	if err := p.ensureLogDir(ctx, a); err != nil {
+		return err
+	}
 	if p.cfg.WebServer == "openlitespeed" {
 		return p.writeOLSVhost(ctx, v, a)
 	}

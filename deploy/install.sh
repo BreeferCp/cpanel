@@ -61,7 +61,7 @@ echo "postfix postfix/main_mailer_type select Internet Site" | debconf-set-selec
 echo "postfix postfix/mailname string ${HOSTNAME_FQDN}" | debconf-set-selections
 apt-get update -qq
 apt-get install -y -qq \
-  nginx mariadb-server sqlite3 openssl curl ca-certificates cron nftables fail2ban \
+  nginx mariadb-server sqlite3 openssl openssh-server curl ca-certificates cron nftables fail2ban \
   postfix postfix-sqlite dovecot-core dovecot-imapd dovecot-pop3d dovecot-lmtpd dovecot-sqlite \
   opendkim opendkim-tools pdns-server pdns-backend-sqlite3 acl unzip zip   dovecot-sieve dovecot-managesieved rspamd pure-ftpd quota file git traceroute
 
@@ -83,6 +83,8 @@ install -d -m 2770 -o root -g breefer /var/lib/breefercp
 install -d -m 0750 -o root -g breefer /etc/breefercp
 install -d -m 0755 /usr/share/breefercp /usr/share/breefercp/static /etc/breefercp/certs
 install -d -m 0755 /etc/nginx/breefercp.d /var/lib/breefercp/acme-webroot
+# nginx may pass through (not list) the data directory to serve ACME challenges.
+setfacl -m u:www-data:--x /var/lib/breefercp
 
 log "Installing the daemon and web UI"
 install -m 0755 "$SRC/breeferd" /usr/local/bin/breeferd
@@ -117,6 +119,7 @@ if [[ ! -f /var/lib/powerdns/pdns.sqlite3 ]]; then
   chown pdns:pdns /var/lib/powerdns/pdns.sqlite3
 fi
 sed "s/__PDNS_API_KEY__/${PDNS_KEY}/" "$SRC/deploy/pdns/pdns.conf" > /etc/powerdns/pdns.d/breefercp.conf
+chown root:pdns /etc/powerdns/pdns.d/breefercp.conf
 chmod 0640 /etc/powerdns/pdns.d/breefercp.conf
 # systemd-resolved occupies port 53 on Ubuntu.
 if systemctl is-active --quiet systemd-resolved; then
@@ -124,7 +127,8 @@ if systemctl is-active --quiet systemd-resolved; then
   printf '[Resolve]\nDNSStubListener=no\n' > /etc/systemd/resolved.conf.d/breefercp.conf
   systemctl restart systemd-resolved
 fi
-systemctl enable --now pdns
+systemctl enable pdns
+systemctl restart pdns
 
 log "Configuring nginx"
 cat > /etc/nginx/conf.d/00-breefercp.conf <<'NGINX'
@@ -141,8 +145,27 @@ server {
 }
 NGINX
 rm -f /etc/nginx/sites-enabled/default
+# On an upgrade the previous tools.conf may be one this nginx cannot parse.
+if [[ -f /etc/nginx/conf.d/10-breefercp-tools.conf ]]; then
+  install -m 0644 "$SRC/deploy/nginx/tools.conf" /etc/nginx/conf.d/10-breefercp-tools.conf
+fi
 nginx -t
 systemctl enable --now nginx
+install -d -m 0755 /var/log/breefercp/sites
+cat > /etc/logrotate.d/breefercp-sites <<'ROTATE'
+/var/log/breefercp/sites/*/*.log {
+    weekly
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    sharedscripts
+    postrotate
+        [ ! -f /run/nginx.pid ] || kill -USR1 "$(cat /run/nginx.pid)"
+    endscript
+}
+ROTATE
 
 log "Configuring Postfix, Dovecot and OpenDKIM"
 install -d -m 0750 -o root -g postfix /etc/postfix/breefercp
@@ -151,11 +174,20 @@ if ! grep -q 'BreeferCP' /etc/postfix/main.cf; then
   { echo; echo "# --- BreeferCP ---"; cat "$SRC/deploy/postfix/main.cf.snippet"; } >> /etc/postfix/main.cf
 fi
 postconf -e "myhostname = ${HOSTNAME_FQDN}"
+# Set on every run, so re-running the installer upgrades older servers.
+# proxy: is required. Postfix's daemons are chrooted and cannot open SQLite's WAL files.
+postconf -e "virtual_mailbox_domains = proxy:sqlite:/etc/postfix/breefercp/domains.cf"
+postconf -e "virtual_mailbox_maps = proxy:sqlite:/etc/postfix/breefercp/mailboxes.cf"
+postconf -e "virtual_alias_maps = proxy:sqlite:/etc/postfix/breefercp/aliases.cf, proxy:sqlite:/etc/postfix/breefercp/lists.cf, proxy:sqlite:/etc/postfix/breefercp/domain_forwards.cf"
+# proxymap drops supplementary groups, so it needs its own read-only access.
+setfacl -m u:postfix:--x,d:u:postfix:r-- /var/lib/breefercp
 install -m 0644 "$SRC/deploy/dovecot/breefercp.conf" /etc/dovecot/conf.d/99-breefercp.conf
 install -m 0640 -o root -g dovecot "$SRC/deploy/dovecot/dovecot-sql-breefercp.conf.ext" /etc/dovecot/dovecot-sql-breefercp.conf.ext
 install -d -o opendkim -g opendkim /etc/opendkim/keys
 cat > /etc/opendkim.conf <<'DKIM'
 Syslog yes
+UserID opendkim
+PidFile /run/opendkim/opendkim.pid
 UMask 007
 Socket inet:8891@localhost
 Mode sv
@@ -243,6 +275,7 @@ fi
 log "Configuring SSH access control"
 getent group breefer-sftp >/dev/null || groupadd --system breefer-sftp
 install -m 0644 "$SRC/deploy/ssh/breefercp.conf" /etc/ssh/sshd_config.d/50-breefercp.conf
+install -d -m 0755 /run/sshd
 sshd -t && systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
 
 log "Installing phpMyAdmin and Roundcube webmail"
@@ -285,17 +318,25 @@ php_admin_value[post_max_size] = 128M
 POOL
 systemctl reload "php${PHP_TOOLS}-fpm" || true
 install -m 0644 "$SRC/deploy/nginx/tools.conf" /etc/nginx/conf.d/10-breefercp-tools.conf
-nginx -t && systemctl reload nginx
+nginx -t
+systemctl reload nginx
 
 log "Starting BreeferCP"
 install -m 0644 "$SRC/deploy/breeferd.service" /etc/systemd/system/breeferd.service
 systemctl daemon-reload
-ADMIN_PASS="$(/usr/local/bin/breeferd create-admin -config /etc/breefercp/breefercp.conf \
-  -username "$ADMIN_USER" -email "$ADMIN_EMAIL" | sed -n 's/^Password: //p')"
+ADMIN_PASS=""
+if ADMIN_OUT="$(/usr/local/bin/breeferd create-admin -config /etc/breefercp/breefercp.conf \
+  -username "$ADMIN_USER" -email "$ADMIN_EMAIL" 2>&1)"; then
+  ADMIN_PASS="$(sed -n 's/^Password: //p' <<<"$ADMIN_OUT")"
+elif [[ "$ADMIN_OUT" != *"already exists"* ]]; then
+  die "$ADMIN_OUT"
+fi
 chgrp breefer /var/lib/breefercp/breefercp.db* 2>/dev/null || true
 chmod 0660 /var/lib/breefercp/breefercp.db* 2>/dev/null || true
+setfacl -m u:postfix:r-- /var/lib/breefercp/breefercp.db* 2>/dev/null || true
 
-systemctl enable --now breeferd
+systemctl enable breeferd
+systemctl restart breeferd
 systemctl enable --now postfix dovecot opendkim php*-fpm fail2ban 2>/dev/null || true
 systemctl restart postfix dovecot opendkim
 

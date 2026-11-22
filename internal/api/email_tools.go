@@ -74,6 +74,18 @@ func (s *Server) addressTaken(ctx context.Context, addr string) (bool, error) {
 	return n > 0, err
 }
 
+// notAList refuses an address that is already a mailing list.
+func (s *Server) notAList(ctx context.Context, addr string) error {
+	var n int
+	if err := s.db.QueryRow(ctx, `SELECT COUNT(*) FROM mailing_lists WHERE address = ?`, addr).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return errConflict("a mailing list already uses that address")
+	}
+	return nil
+}
+
 // ---- mailbox settings -------------------------------------------------------
 
 func (s *Server) updateMailbox(w http.ResponseWriter, r *http.Request) error {

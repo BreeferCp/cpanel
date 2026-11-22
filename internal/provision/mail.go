@@ -25,7 +25,7 @@ func (p *Provisioner) EnsureMaildir(ctx context.Context, a Account, domain, loca
 	}
 	base := filepath.Join(a.Home, "mail", domain, local)
 	for _, sub := range []string{"", "cur", "new", "tmp"} {
-		if _, err := p.run.Run(ctx, "install", "-d", "-m", "0700", "-o", a.SysUser, "-g", a.SysUser, filepath.Join(base, sub)); err != nil {
+		if err := p.MkdirAsUser(ctx, a, filepath.Join(base, sub), "0700"); err != nil {
 			return err
 		}
 	}
@@ -40,7 +40,7 @@ func (p *Provisioner) RemoveMaildir(ctx context.Context, a Account, domain, loca
 	if err := system.LocalPart(local); err != nil {
 		return err
 	}
-	_, err := p.run.Run(ctx, "rm", "-rf", "--", filepath.Join(a.Home, "mail", domain, local))
+	_, err := p.asUser(ctx, a, nil, "rm", "-rf", "--", filepath.ToSlash(filepath.Join(a.Home, "mail", domain, local)))
 	return err
 }
 

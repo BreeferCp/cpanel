@@ -1,3 +1,4 @@
 dbpath = /var/lib/breefercp/breefercp.db
-# Domain forwarders: user@domain becomes user@target.
-query = SELECT '%u@' || target FROM mail_domain_forwards WHERE domain = '%d'
+# Domain forwarders: user@domain becomes user@target, unless the address is a
+# mailbox, forwarder or list of its own.
+query = SELECT '%u@' || target FROM mail_domain_forwards WHERE domain = '%d' AND NOT EXISTS (SELECT 1 FROM mailboxes WHERE address = '%u@%d') AND NOT EXISTS (SELECT 1 FROM mail_aliases WHERE source = '%u@%d') AND NOT EXISTS (SELECT 1 FROM mailing_lists WHERE address = '%u@%d')

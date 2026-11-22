@@ -196,7 +196,7 @@ func RenderOLSVhost(v Vhost, a Account, acmeRoot string) (string, error) {
 	}
 	view := olsView{
 		Vhost: v, User: a.SysUser, Home: filepath.ToSlash(a.Home),
-		LogDir:   filepath.ToSlash(filepath.Join(a.Home, "logs")),
+		LogDir:   LogDir(a),
 		LSPHP:    fmt.Sprintf("%s/lsphp%s/bin/lsphp", olsRoot, strings.ReplaceAll(v.PHP, ".", "")),
 		ACMERoot: acmeRoot, MaxConns: procs, Procs: procs * 50,
 		MemSoft: a.Limits.MemoryMB * 3 / 4, MemHard: a.Limits.MemoryMB, Ini: ini,
