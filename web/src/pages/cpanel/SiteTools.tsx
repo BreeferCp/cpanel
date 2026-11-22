@@ -642,6 +642,9 @@ export function TrackDns() {
 const noticeLabels: Record<string, [string, string]> = {
   disk_quota: ["Disk space", "When the account uses 80% of its disk space."],
   bandwidth: ["Bandwidth", "When the account uses 80% of its monthly bandwidth."],
+  ssl_expiry: ["Expiring certificate", "When an SSL certificate expires within 14 days."],
+  password_changed: ["Password changed", "When the password of this login changes."],
+  contact_changed: ["Contact changed", "Tells the old address when the contact address changes."],
 };
 
 export function ContactInfo() {

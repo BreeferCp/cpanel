@@ -26,7 +26,7 @@ func TestRedirectValidationBlocksInjection(t *testing.T) {
 }
 
 func TestVhostRedirectsAndErrorPages(t *testing.T) {
-	out, err := RenderVhost(Vhost{Domain: "example.com", Redirects: []Redirect{{"/old", "https://example.com/new", 301}},
+	out, err := RenderVhost(Vhost{Domain: "example.com", Redirects: []Redirect{{"/old", "https://example.com/new", 301, false}},
 		ErrorPages: []int{404, 503}}, testAcct(), "/acme")
 	if err != nil {
 		t.Fatal(err)
@@ -61,7 +61,7 @@ func TestOLSRender(t *testing.T) {
 	a := testAcct()
 	a.PHPIni = map[string]string{"memory_limit": "512M"}
 	out, err := RenderOLSVhost(Vhost{Domain: "example.com", Aliases: []string{"www.example.com"},
-		Redirects: []Redirect{{"/old.html", "https://example.com/new", 301}}, CertPath: "/c.pem", KeyPath: "/k.pem"}, a, "/acme")
+		Redirects: []Redirect{{"/old.html", "https://example.com/new", 301, false}}, CertPath: "/c.pem", KeyPath: "/k.pem"}, a, "/acme")
 	if err != nil {
 		t.Fatal(err)
 	}

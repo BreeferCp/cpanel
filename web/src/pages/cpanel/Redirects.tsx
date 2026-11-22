@@ -6,7 +6,7 @@ import type { Domain, RedirectRule } from "@/lib/types";
 import { useAccountId } from "@/state/scope";
 import { Button, IconButton } from "@/components/ui/Button";
 import { DomainPicker } from "@/components/ui/DomainPicker";
-import { Field, Input, Select } from "@/components/ui/Form";
+import { Checkbox, Field, Input, Select } from "@/components/ui/Form";
 import { Badge, Card, EmptyState, Loading, Mono, PageHeader, Table, Td, Th, Tr } from "@/components/ui/Layout";
 import { Modal } from "@/components/ui/Modal";
 
@@ -17,7 +17,7 @@ export default function Redirects() {
   const key = `/accounts/${aid}/domains/${domainId}/redirects`;
   const q = useGet<RedirectRule[]>(key, !!domainId);
   const [open, setOpen] = useState(false);
-  const [f, setF] = useState({ source: "/", target: "https://", code: "301" });
+  const [f, setF] = useState({ source: "/", target: "https://", code: "301", wildcard: false });
   const domain = domains.data?.find((d) => d.id === domainId);
 
   const add = useMutate(() => api.post(key, { ...f, code: Number(f.code) }), {
@@ -25,7 +25,7 @@ export default function Redirects() {
     success: "Redirect added",
     onSuccess: () => {
       setOpen(false);
-      setF({ source: "/", target: "https://", code: "301" });
+      setF({ source: "/", target: "https://", code: "301", wildcard: false });
     },
   });
   const del = useMutate((id: string) => api.del(`${key}/${id}`), { invalidate: [key], success: "Redirect removed" });
@@ -69,6 +69,7 @@ export default function Redirects() {
                     <Mono className="text-ink">
                       {domain?.name}
                       {r.source}
+                      {r.wildcard && (r.source.endsWith("/") ? "*" : "/*")}
                     </Mono>
                   </Td>
                   <Td>
@@ -104,9 +105,13 @@ export default function Redirects() {
         }
       >
         <div className="space-y-4">
-          <Field label="From path" hint="An exact path, for example /old-page">
+          <Field label="From path" hint={f.wildcard ? "Everything below this path too; / means the whole site" : "An exact path, for example /old-page"}>
             {(id) => <Input id={id} className="font-mono" value={f.source} onChange={(e) => setF({ ...f, source: e.target.value })} autoFocus />}
           </Field>
+          <label className="flex items-center gap-2 text-[13px] text-ink">
+            <Checkbox checked={f.wildcard} onChange={(e) => setF({ ...f, wildcard: e.target.checked })} />
+            Wildcard: keep the rest of the path and the query
+          </label>
           <Field label="To URL">{(id) => <Input id={id} className="font-mono" value={f.target} onChange={(e) => setF({ ...f, target: e.target.value })} />}</Field>
           <Field label="Type">
             {(id) => (

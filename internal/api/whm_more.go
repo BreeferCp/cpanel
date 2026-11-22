@@ -182,7 +182,7 @@ type certJob struct{ domainID, accountID string }
 // validates cannot use up Let's Encrypt's order limit on every run.
 func (s *Server) domainsWithoutCert(ctx context.Context) ([]certJob, error) {
 	rows, err := s.db.Query(ctx, `SELECT d.id, d.account_id FROM domains d JOIN accounts a ON a.id = d.account_id
-		WHERE a.status = 'active' AND NOT EXISTS (SELECT 1 FROM ssl_certs c WHERE c.domain_id = d.id)
+		WHERE a.status = 'active' AND d.autossl = 1 AND NOT EXISTS (SELECT 1 FROM ssl_certs c WHERE c.domain_id = d.id)
 		ORDER BY RANDOM() LIMIT 150`)
 	if err != nil {
 		return nil, err

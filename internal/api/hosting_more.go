@@ -251,6 +251,8 @@ type protectedView struct {
 	Path     string   `json:"path"`
 	Realm    string   `json:"realm"`
 	Users    []string `json:"users"`
+	Leech    int      `json:"leech_limit"`
+	Blocked  []string `json:"blocked_users"`
 }
 
 func (s *Server) listProtected(w http.ResponseWriter, r *http.Request) error {
@@ -258,7 +260,7 @@ func (s *Server) listProtected(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	rows, err := s.db.Query(r.Context(), `SELECT p.id, p.domain_id, d.name, p.path, p.realm
+	rows, err := s.db.Query(r.Context(), `SELECT p.id, p.domain_id, d.name, p.path, p.realm, p.leech_limit
 		FROM protected_dirs p JOIN domains d ON d.id = p.domain_id WHERE d.account_id = ? ORDER BY d.name, p.path`, a.ID)
 	if err != nil {
 		return err
@@ -266,8 +268,8 @@ func (s *Server) listProtected(w http.ResponseWriter, r *http.Request) error {
 	out := []protectedView{}
 	index := map[string]int{}
 	for rows.Next() {
-		v := protectedView{Users: []string{}}
-		if err := rows.Scan(&v.ID, &v.DomainID, &v.Domain, &v.Path, &v.Realm); err != nil {
+		v := protectedView{Users: []string{}, Blocked: []string{}}
+		if err := rows.Scan(&v.ID, &v.DomainID, &v.Domain, &v.Path, &v.Realm, &v.Leech); err != nil {
 			rows.Close()
 			return err
 		}
@@ -275,7 +277,7 @@ func (s *Server) listProtected(w http.ResponseWriter, r *http.Request) error {
 		out = append(out, v)
 	}
 	rows.Close()
-	urows, err := s.db.Query(r.Context(), `SELECT u.dir_id, u.username FROM protected_dir_users u
+	urows, err := s.db.Query(r.Context(), `SELECT u.dir_id, u.username, u.disabled FROM protected_dir_users u
 		JOIN protected_dirs p ON p.id = u.dir_id JOIN domains d ON d.id = p.domain_id WHERE d.account_id = ? ORDER BY u.username`, a.ID)
 	if err != nil {
 		return err
@@ -283,11 +285,15 @@ func (s *Server) listProtected(w http.ResponseWriter, r *http.Request) error {
 	defer urows.Close()
 	for urows.Next() {
 		var id, u string
-		if err := urows.Scan(&id, &u); err != nil {
+		var off int
+		if err := urows.Scan(&id, &u, &off); err != nil {
 			return err
 		}
 		if i, ok := index[id]; ok {
 			out[i].Users = append(out[i].Users, u)
+			if off == 1 {
+				out[i].Blocked = append(out[i].Blocked, u)
+			}
 		}
 	}
 	writeJSON(w, 200, out)
@@ -314,7 +320,7 @@ func (s *Server) createProtected(w http.ResponseWriter, r *http.Request) error {
 	if err := provision.ValidateProtectedDir(provision.ProtectedDir{Path: req.Path, Realm: req.Realm}); err != nil {
 		return err
 	}
-	req.ID, req.Domain, req.Users = ids.New(), d.Name, []string{}
+	req.ID, req.Domain, req.Users, req.Blocked, req.Leech = ids.New(), d.Name, []string{}, []string{}, 0
 	if _, err := s.db.Exec(r.Context(), `INSERT INTO protected_dirs (id, domain_id, path, realm, created_at) VALUES (?,?,?,?,?)`,
 		req.ID, d.ID, req.Path, req.Realm, time.Now().Unix()); err != nil {
 		return err
@@ -345,7 +351,7 @@ func (s *Server) protectedOf(ctx context.Context, accountID, id string) error {
 }
 
 func (s *Server) writeProtectedUsers(ctx context.Context, a *acct, id string) error {
-	rows, err := s.db.Query(ctx, `SELECT username, password_hash FROM protected_dir_users WHERE dir_id = ?`, id)
+	rows, err := s.db.Query(ctx, `SELECT username, password_hash FROM protected_dir_users WHERE dir_id = ? AND disabled = 0`, id)
 	if err != nil {
 		return err
 	}
@@ -391,6 +397,9 @@ func (s *Server) putProtectedUser(w http.ResponseWriter, r *http.Request) error 
 		return err
 	}
 	if _, err := s.db.Exec(r.Context(), `INSERT INTO protected_dir_users (dir_id, username, password_hash) VALUES (?,?,?)`, id, user, hash); err != nil {
+		return err
+	}
+	if _, err := s.db.Exec(r.Context(), `DELETE FROM leech_hits WHERE dir_id = ? AND username = ?`, id, user); err != nil {
 		return err
 	}
 	if err := s.writeProtectedUsers(r.Context(), a, id); err != nil {

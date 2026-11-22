@@ -278,7 +278,7 @@ func (p *Provisioner) WPRestore(ctx context.Context, a Account, dir, db, src str
 		if err := system.DBName(db); err != nil {
 			return err
 		}
-		if err := p.run.RunWithFileInput(ctx, filepath.Join(src, "db.sql"), "mariadb", "--", db); err != nil {
+		if err := p.ImportDatabase(ctx, a, db, filepath.Join(src, "db.sql")); err != nil {
 			return err
 		}
 	}
@@ -333,7 +333,7 @@ func (p *Provisioner) WPClone(ctx context.Context, a Account, c WPCloneSpec) err
 	if err := p.run.RunToFile(ctx, dump, "mariadb-dump", "--single-transaction", "--routines", "--", c.SrcDB); err != nil {
 		return err
 	}
-	if err := p.run.RunWithFileInput(ctx, dump, "mariadb", "--", c.DstDB); err != nil {
+	if err := p.ImportDatabase(ctx, a, c.DstDB, dump); err != nil {
 		return err
 	}
 	wp := func(stdin string, args ...string) error {
@@ -397,7 +397,7 @@ cp -p "$tmp" "$dst/wp-config.php"; rm -f "$tmp"`
 	if err := p.run.RunToFile(ctx, dump, "mariadb-dump", "--single-transaction", "--routines", "--", c.SrcDB); err != nil {
 		return err
 	}
-	if err := p.run.RunWithFileInput(ctx, dump, "mariadb", "--", c.DstDB); err != nil {
+	if err := p.ImportDatabase(ctx, a, c.DstDB, dump); err != nil {
 		return err
 	}
 	if _, err := p.wp(ctx, a, c.DstDir, nil, "search-replace", c.SrcURL, c.DstURL, "--all-tables-with-prefix", "--skip-columns=guid", "--precise"); err != nil {

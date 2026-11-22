@@ -46,7 +46,7 @@ Every path is resolved with Go's `os.Root`, which refuses `..` and symlink escap
 - **Sieve scripts** (spam filters, autoresponders) are rendered with RFC 5228 string escaping and written through the home-directory jail, so a planted symlink cannot redirect the write.
 - **Git** clones accept public `https://` URLs only (no credentials, `file://`, `ssh://` or `ext::`), with `protocol.allow=never` except https, and run as the account user.
 - **Remote MySQL** host patterns pass an allow-list (IP, host name, `a.b.c.%`); `localhost` cannot be re-added.
-- **WordPress toolkit:** every WP-CLI call runs as the account user. Database dumps and imports run as root but only against the installation's own validated database names, and dump files stay in root-owned directories. Restores unpack the archive as the account user. Clone and push refuse a destination inside its source (and the reverse). Smart updates back up first and roll back if the home page starts failing.
+- **WordPress toolkit:** every WP-CLI call runs as the account user. Dumps are written by root to root-owned directories; imports run as the account (see *Database imports*). Restores unpack the archive as the account user. Clone and push refuse a destination inside its source (and the reverse). Smart updates back up first and roll back if the home page starts failing.
 - **Self-update:** releases install only when the tarball's SHA-256 matches the release's `SHA256SUMS`. The archive is extracted with path-traversal, link and size checks, and the previous binary and UI are kept for rollback. The checksum and the tarball come from the same GitHub release, so this protects against corrupted and tampered downloads in transit, not against a compromised GitHub account; signed releases are planned.
 
 ## Features added in 0.4
@@ -61,6 +61,10 @@ Every path is resolved with Go's `os.Root`, which refuses `..` and symlink escap
 ## Tenant isolation
 
 - **Database grants** escape `_`, which MariaDB reads as a wildcard in `GRANT`; grants from older versions are narrowed on the first start.
+- **Customer paths:** everything below a home is controlled by the customer, symlinks included, so the panel creates, writes and removes there as the account user. Web server logs live in `/var/log/breefercp/sites`, because nginx opens them as root. nginx refuses symlinks whose owner differs from their target's.
+- **Database imports** (backup restore, WordPress restore, clone and push) treat the dump as hostile: the client runs as the customer, as a database user limited to that one database and locked between imports.
+- **Domains:** a customer must prove control of a new domain (this server's nameservers, an A record to it, or a TXT record), and cannot add well-known domains, the server's own names or names overlapping another account's. Accounts created by administrators and resellers skip the proof, so check the domain on signups that a billing system provisions automatically.
+- **Leech Protection** counts only successful requests inside the protected folder, so a forged user name cannot get someone else blocked.
 - **Mail submission** (587, 465) needs TLS and a login, and a mailbox may only send as itself or as a forwarder that delivers to it. Suspended accounts cannot sign in. Mail injected locally (PHP `mail()`, `sendmail`) is not sender-checked.
 
 ## Transport and headers

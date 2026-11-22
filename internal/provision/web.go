@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"text/template"
 
@@ -48,6 +50,8 @@ type Redirect struct {
 	Source string // "/old-page"
 	Target string // "https://example.com/new"
 	Code   int    // 301, 302, 307, 308
+	// Wildcard also redirects everything below Source, keeping the rest of the path.
+	Wildcard bool
 }
 
 // ErrorCodes are the statuses a customer may customise.
@@ -72,6 +76,9 @@ func ValidateRedirect(r Redirect) error {
 	case 301, 302, 307, 308:
 	default:
 		return fmt.Errorf("%w: redirect code must be 301, 302, 307 or 308", system.ErrInvalid)
+	}
+	if r.Wildcard && strings.ContainsAny(r.Target, "?#") {
+		return fmt.Errorf("%w: a wildcard target cannot have ? or #", system.ErrInvalid)
 	}
 	return nil
 }
@@ -151,8 +158,12 @@ server {
 {{- if .DenyIPs}}
     allow all;
 {{- end}}
-{{- range .Redirects}}
+{{- range .ExactV}}
     location = {{.Source}} { return {{.Code}} {{.Target}}; }
+{{- end}}
+{{- range .WildV}}
+    # $request_uri is the raw request: a decoded one could smuggle header bytes.
+    if ($request_uri ~ "{{.Pattern}}") { return {{.Code}} {{.Target}}$bfrest$is_args$args; }
 {{- end}}
 {{- if .ErrorPages}}
 {{- range .ErrorPages}}
@@ -250,6 +261,34 @@ type vhostView struct {
 	RootIndex  bool
 	MimeV      []mimeView
 	GzipTypes  string
+	ExactV     []Redirect
+	WildV      []wildRedirect
+}
+
+type wildRedirect struct {
+	Pattern, Target string
+	Code            int
+}
+
+// wildcardView orders longest source first, so the specific rule wins.
+func wildcardView(rs []Redirect) []wildRedirect {
+	var wild []Redirect
+	for _, r := range rs {
+		if r.Wildcard {
+			wild = append(wild, r)
+		}
+	}
+	sort.SliceStable(wild, func(i, j int) bool { return len(wild[i].Source) > len(wild[j].Source) })
+	const tail = `(?:\?.*)?$`
+	out := make([]wildRedirect, 0, len(wild))
+	for _, r := range wild {
+		pat := "^" + regexp.QuoteMeta(strings.TrimSuffix(r.Source, "/")) + `(?:/(?<bfrest>[^?#]*))?` + tail
+		if r.Source == "/" {
+			pat = `^/(?!\.well-known/acme-challenge/)(?<bfrest>[^?#]*)` + tail
+		}
+		out = append(out, wildRedirect{Pattern: pat, Target: strings.TrimSuffix(r.Target, "/") + "/", Code: r.Code})
+	}
+	return out
 }
 
 // indexView is a listed folder. ^~ locations inherit nothing from one
@@ -375,6 +414,12 @@ func RenderVhost(v Vhost, a Account, acmeRoot string) (string, error) {
 		}
 		seen[p] = true
 	}
+	for _, r := range v.Redirects {
+		if !r.Wildcard {
+			view.ExactV = append(view.ExactV, r)
+		}
+	}
+	view.WildV = wildcardView(v.Redirects)
 	mv, err := mimeGroups(v.Mime)
 	if err != nil {
 		return "", err
@@ -406,12 +451,25 @@ func (p *Provisioner) WriteVhost(ctx context.Context, v Vhost, a Account) error 
 		return err
 	}
 	path := filepath.Join(p.cfg.NginxConfDir, v.Domain+".conf")
+	var prev []byte
+	if !p.run.DryRun {
+		old, err := os.ReadFile(path)
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		prev = old
+	}
 	if err := p.run.WriteFile(path, []byte(conf), 0o644); err != nil {
 		return err
 	}
 	if _, err := p.run.Run(ctx, "nginx", "-t"); err != nil {
 		// Roll back a bad config instead of leaving nginx unable to reload.
-		_ = p.run.Remove(path)
+		// Put the working file back; removing it would take the site down.
+		if prev != nil {
+			_ = p.run.WriteFile(path, prev, 0o644)
+		} else {
+			_ = p.run.Remove(path)
+		}
 		return fmt.Errorf("nginx rejected vhost for %s: %w", v.Domain, err)
 	}
 	return p.ReloadWeb(ctx)

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useGet, useMutate } from "@/lib/hooks";
 import { Button } from "@/components/ui/Button";
-import { Field, Input } from "@/components/ui/Form";
+import { Field, Input, Select } from "@/components/ui/Form";
 import { Card, ErrorNote, Loading, PageHeader } from "@/components/ui/Layout";
 
 type S = Record<string, string>;
@@ -45,6 +45,16 @@ export default function Settings() {
             <Field label="Nameserver 2">{(id) => <Input id={id} value={f.nameserver2 ?? ""} onChange={set("nameserver2")} placeholder="ns2.example.com" />}</Field>
             <Field label="Nameserver 2 IP">{(id) => <Input id={id} className="font-mono" value={f.nameserver2_ip ?? ""} onChange={set("nameserver2_ip")} placeholder="203.0.113.11" />}</Field>
           </div>
+        </Card>
+        <Card title="Domain ownership">
+          <Field label="Customers must prove they control a domain before adding it" hint="Proof is this server's nameservers, an A record pointing here, or a TXT record. Switching it off lets a customer receive mail for domains they do not own.">
+            {(id) => (
+              <Select id={id} value={f.domain_verification || "on"} onChange={(e) => setF({ ...f, domain_verification: e.target.value })}>
+                <option value="on">On (recommended)</option>
+                <option value="off">Off</option>
+              </Select>
+            )}
+          </Field>
         </Card>
         <Card title="Web tools" description="Where phpMyAdmin and Roundcube webmail are served.">
           <Field label="Tools URL" hint="Defaults to https://<hostname>:8443">{(id) => <Input id={id} value={f.tools_url ?? ""} onChange={set("tools_url")} placeholder="https://server.example.com:8443" />}</Field>

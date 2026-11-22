@@ -365,6 +365,7 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) error {
 	// Invalidate every other session.
 	_, _ = s.db.Exec(r.Context(), `DELETE FROM sessions WHERE user_id = ? AND id <> ?`, u.ID, p.SessionID)
 	s.audit(r, "auth.password", u.Username, true, "")
+	s.securityNotice(r.Context(), u.ID, "password_changed", "The password of "+u.Username+" was changed", "The password of the hosting login "+u.Username+" was just changed.")
 	w.WriteHeader(http.StatusNoContent)
 	return nil
 }

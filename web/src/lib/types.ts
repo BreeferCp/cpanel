@@ -355,6 +355,7 @@ export interface RedirectRule {
   source: string;
   target: string;
   code: number;
+  wildcard: boolean;
 }
 
 export interface ErrorPage {
@@ -427,6 +428,8 @@ export interface ProtectedDir {
   path: string;
   realm: string;
   users: string[];
+  leech_limit: number;
+  blocked_users?: string[];
 }
 
 export interface IPBlock {

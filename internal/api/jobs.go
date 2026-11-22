@@ -34,7 +34,9 @@ func (s *Server) RunJobs(ctx context.Context) {
 			s.runScheduledBackups(ctx)
 			s.autoUpdateTick(ctx)
 			s.wpAutoUpdateTick(ctx)
+			s.scanLogs(ctx)
 			s.quotaNotices(ctx)
+			s.certNotices(ctx)
 		}
 	}
 }
@@ -142,7 +144,7 @@ func (s *Server) purgeExpired(ctx context.Context) {
 // renewCerts re-issues Let's Encrypt certificates expiring within 30 days.
 func (s *Server) renewCerts(ctx context.Context) {
 	rows, err := s.db.Query(ctx, `SELECT d.id, d.account_id FROM ssl_certs c JOIN domains d ON d.id = c.domain_id
-		WHERE c.issuer = 'letsencrypt' AND c.auto_renew = 1 AND c.not_after < ?`, time.Now().AddDate(0, 0, 30).Unix())
+		WHERE c.issuer = 'letsencrypt' AND c.auto_renew = 1 AND d.autossl = 1 AND c.not_after < ?`, time.Now().AddDate(0, 0, 30).Unix())
 	if err != nil {
 		s.log.Error("renew: query", "err", err)
 		return

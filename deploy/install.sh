@@ -126,6 +126,10 @@ if systemctl is-active --quiet systemd-resolved; then
   mkdir -p /etc/systemd/resolved.conf.d
   printf '[Resolve]\nDNSStubListener=no\n' > /etc/systemd/resolved.conf.d/breefercp.conf
   systemctl restart systemd-resolved
+  # resolv.conf normally points at the stub that was just switched off.
+  if [[ "$(readlink -f /etc/resolv.conf)" == "/run/systemd/resolve/stub-resolv.conf" ]]; then
+    ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
+  fi
 fi
 systemctl enable pdns
 systemctl restart pdns

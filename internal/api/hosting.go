@@ -270,6 +270,9 @@ func (s *Server) addDomain(w http.ResponseWriter, r *http.Request) error {
 	if err := s.claimDomain(r.Context(), principalFrom(r.Context()), a.ID, req.Name); err != nil {
 		return err
 	}
+	if err := s.verifyDomain(r.Context(), principalFrom(r.Context()), a.ID, req.Name); err != nil {
+		return err
+	}
 	if err := s.within(r.Context(), "domains", a.ID, a.pkg.MaxDomains, "domains"); err != nil {
 		return err
 	}

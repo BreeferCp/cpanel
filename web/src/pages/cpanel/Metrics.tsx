@@ -231,6 +231,34 @@ export function Bandwidth() {
   );
 }
 
+function LogArchives() {
+  const aid = useAccountId();
+  const key = `/accounts/${aid}/logs/archives`;
+  const q = useGet<{ name: string; size: number; mod_time: string }[]>(key);
+  return (
+    <section className="mt-4">
+      <h2 className="mb-2 text-[13.5px] font-semibold text-ink">Archived logs (last 8 weeks)</h2>
+      <DataTable
+        rows={q.data}
+        loading={q.isLoading}
+        error={q.error}
+        rowKey={(f) => f.name}
+        empty={{ icon: FileText, title: "No archived logs yet", description: "Logs are archived every week and kept for 8 weeks." }}
+        columns={[
+          { key: "name", header: "File", sort: (f) => f.name, render: (f) => <span className="text-ink">{f.name}</span> },
+          { key: "size", header: "Size", sort: (f) => f.size, render: (f) => `${Math.ceil(f.size / 1024)} KB` },
+          { key: "date", header: "Date", sort: (f) => f.mod_time, render: (f) => new Date(f.mod_time).toLocaleDateString() },
+        ]}
+        actions={(f) => (
+          <a href={`/api/v1${key}/${encodeURIComponent(f.name)}`} download className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-accent hover:underline">
+            <Download className="size-3.5" aria-hidden /> Download
+          </a>
+        )}
+      />
+    </section>
+  );
+}
+
 export function RawAccess() {
   const aid = useAccountId();
   const domains = useGet<Domain[]>(`/accounts/${aid}/domains`);
@@ -275,6 +303,7 @@ export function RawAccess() {
           </a>
         </div>
       </Card>
+      <LogArchives />
       <p className="mt-3 text-[12px] text-muted">Logs use the combined format (IP, time, request, status, size, referrer, browser) and can be loaded into tools such as GoAccess or AWStats. Up to the latest 64 MB of each log is included.</p>
     </>
   );

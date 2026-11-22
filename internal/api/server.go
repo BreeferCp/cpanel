@@ -23,6 +23,7 @@ import (
 // Server wires the HTTP surface to the store and provisioner.
 type Server struct {
 	autoSSLBusy atomic.Bool
+	resolver    dnsLookup // nil in dry-run
 	cfg         config.Config
 	db          *store.Store
 	prov        *provision.Provisioner
@@ -48,6 +49,9 @@ func New(cfg config.Config, db *store.Store, prov *provision.Provisioner, mdb *s
 		started:    time.Now(),
 		metrics:    &metricsRing{},
 		cgroups:    newCgroupSampler(),
+	}
+	if !cfg.DryRun {
+		s.resolver = net.DefaultResolver
 	}
 	for _, c := range cfg.TrustedProxies {
 		if _, n, err := net.ParseCIDR(strings.TrimSpace(c)); err == nil {
@@ -163,6 +167,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	s.updateRoutes(mux)
 	s.emailToolRoutes(mux)
 	s.moreToolRoutes(mux)
+	s.fullToolRoutes(mux)
 	s.siteToolRoutes(mux)
 	s.whmMoreRoutes(mux)
 }

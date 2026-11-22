@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Field, Textarea } from "@/components/ui/Form";
 import { Badge, Card, EmptyState, ErrorNote, Loading, PageHeader, Table, Td, Th, Tr } from "@/components/ui/Layout";
 import { ConfirmDialog, Modal } from "@/components/ui/Modal";
+import { AutoSslExclusions, CsrGenerator } from "./SslTools";
 
 const DAY = 86400;
 
@@ -42,6 +43,7 @@ export default function Ssl() {
       <PageHeader
         title="SSL/TLS"
         description="Free, auto-renewing Let's Encrypt certificates, or bring your own."
+        actions={<CsrGenerator domains={domains.data ?? []} />}
       />
       <Card flush>
         {loading ? (
@@ -105,6 +107,7 @@ export default function Ssl() {
           </Table>
         )}
       </Card>
+      {!!domains.data?.length && <AutoSslExclusions domains={domains.data} />}
       <p className="mt-3 max-w-2xl text-[12.5px] text-muted">
         Free certificates use the HTTP-01 challenge, so the domain must already point at this server. Both the bare domain and www are covered.
       </p>

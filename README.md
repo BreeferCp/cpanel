@@ -16,7 +16,9 @@ Each panel has its own sign-in, session cookie and layout; a customer login is r
 
 License: [AGPL-3.0-or-later](LICENSE).
 
-> **Status: alpha (0.3).** Everything below is implemented and covered by automated tests. A browser crawler exercises it end to end in dry-run mode: both panels, every role, both themes, desktop and mobile. The host-level provisioning has **not yet been validated on a live server**, so do not put production customers on it yet. See [Project status](#project-status).
+> **Status: alpha (0.5).** The installer and the core of hosting (sites, PHP, HTTPS, databases, mail, backups) are tested end to end on Ubuntu 24.04. Some tools below have only unit tests, and there has been **no independent security review**, so do not put production customers on it yet. See [Project status](#project-status) for exactly what was tested.
+>
+> **Installed before 0.5?** Those versions have critical security flaws. Re-run `deploy/install.sh` from a current build now; the panel's own updater cannot apply all of the fixes.
 
 ## Screenshots
 
@@ -83,16 +85,16 @@ More in [docs/images](docs/images).
 
 | Area | What you get |
 |---|---|
-| Home | Tool groups with instant search (press `/`), general information, usage statistics, 24-hour CPU and memory charts, provider announcements |
-| Files | File manager (upload, edit, rename, copy, chmod, zip/unzip, download), disk usage, **FTP accounts** (FTPS, chrooted, per-account quota), backups with restore, **Git version control** (clone, pull, push over SSH) |
-| Domains | Domains, **Subdomains**, **Aliases**, redirects (301/302/307/308), DNS zone editor with **DNSSEC**, **Dynamic DNS** (dyndns-compatible update URL), SSL (Let's Encrypt or own certificate) |
+| Home | Usage at a glance, favourite tools you can pin, a sidebar of every tool, instant search (press `/`), general information, 24-hour CPU and memory charts, provider announcements |
+| Files | File manager (upload, edit, rename, copy, chmod, zip/unzip, download), disk usage, **FTP accounts** (FTPS, chrooted, per-account quota), **backups** (full, files or databases; download; restore files, databases or both), **Git version control** (clone, pull, push over SSH) |
+| Domains | Domains, **Subdomains**, **Aliases**, proof of ownership for new domains, redirects (301/302/307/308, wildcard), DNS zone editor with **DNSSEC**, **Dynamic DNS** (dyndns-compatible update URL), SSL (Let's Encrypt or own certificate, key and CSR generator, AutoSSL exclusions) |
 | Email | **Email Accounts** (quota, suspend, connect devices, bulk actions), **Forwarders** and **domain forwarders**, **Email Routing** (local or remote MX), **Default Address** (catch-all), **Mailing Lists** (distribution lists), **Email Filters** (global and per account, ordered, with a filter tester), **Track Delivery** (Postfix log search), **Email Deliverability** (SPF, DKIM, DMARC, MX and reverse DNS checks with one-click repair), **autoresponders**, **spam filters**, **Address Importer** (CSV), **Email Disk Usage**, webmail |
 | Databases | MariaDB databases, users and grants, **Database Wizard**, check and repair tables, phpMyAdmin single sign-on, **Remote MySQL** hosts |
-| Metrics | **Visitors** (latest hits, top pages, visitors and referrers), **Errors**, **Bandwidth** per domain per day, **Raw Access** log downloads, **Resource Usage** (CPU, memory, processes vs. limits) |
+| Metrics | **Visitors** (latest hits, top pages, visitors and referrers), **Errors**, **Bandwidth** per domain per day with a monthly total, **Raw Access** with 8 weeks of archived logs, **Resource Usage** (CPU, memory, processes vs. limits) |
 | Software | One-click app installer (WordPress, Drupal, Nextcloud, Matomo, Grav, DokuWiki, Laravel); **WordPress Toolkit** (see below); **MultiPHP Manager** and **MultiPHP INI Editor**; **Optimize Website** (gzip); Node.js, Python and Ruby apps; Docker |
-| Security | SSL/TLS, **Directory Privacy** (password-protected folders), **IP Blocker**, **Hotlink Protection**, SSH keys |
+| Security | SSL/TLS, **Directory Privacy** (password-protected folders) with **Leech Protection**, **IP Blocker**, **Hotlink Protection**, SSH keys |
 | Advanced | Browser terminal, cron jobs, **Track DNS** (lookup and traceroute), **Indexes** (directory listings), custom error pages, **MIME Types** |
-| Preferences | Password & Security, **Two-Factor Authentication**, **Manage API Tokens**, **Contact Information** (disk and bandwidth warning emails), support tickets |
+| Preferences | Password & Security, **Two-Factor Authentication**, **Manage API Tokens**, **User Manager** (email and FTP under one login), **Contact Information** (warnings for disk, bandwidth, expiring certificates, password and contact changes), support tickets |
 
 ### WordPress Toolkit
 
@@ -153,7 +155,9 @@ sudo ./deploy/install.sh --email you@example.com --hostname panel.example.com
 
 The installer is for a **dedicated** server: it takes over nginx, Postfix, Dovecot, Rspamd, Pure-FTPd, SSH access groups and firewall configuration.
 
-Updating later: **WHM → Updates**, or `sudo breeferd update` from a shell (`-check` to only look, `-rollback` to go back).
+Updating later: **WHM → Updates**, or `sudo breeferd update` from a shell (`-check` to only look, `-rollback` to go back). That replaces the binary and UI only. When a release changes service configuration, re-run `deploy/install.sh` from the new release. It is safe to run again, but it rewrites `/etc/breefercp/breefercp.conf`, so keep a copy of your own changes.
+
+Set the server IP and nameservers in WHM before adding customers: domain ownership checks use them.
 
 ## Billing integrations
 
@@ -178,10 +182,10 @@ Working and tested:
 
 Not done yet:
 
-1. **Live-server validation** of every provisioner and of the installer on real Debian and Ubuntu hosts. OpenLiteSpeed support is the least proven. Mail filtering (Rspamd and Sieve, including the new email filters), mailing lists, domain forwarders and email routing (Postfix SQLite maps), FTP, DNSSEC, SSH settings and the WordPress toolkit's clone, push and restore commands have unit tests for their generated configuration and commands, but have not run against real services yet.
+1. **Wider live-server validation.** Tested end to end on Ubuntu 24.04: installer and re-install, accounts, nginx and PHP, HTTPS with an uploaded certificate, databases, mail delivery and submission, forwarders, catch-all, cron, backups and restore, bandwidth, Leech Protection, redirects. **Not** tested on a real host: Debian, Ubuntu 22.04 and 26.04, real Let's Encrypt issuance, OpenLiteSpeed (experimental, and several nginx-only tools are refused there), Docker and runtime apps, the app installer and WordPress toolkit, email filters and spam scoring, FTP transfers, DNSSEC, the firewall, webmail and phpMyAdmin sign-in, disk quotas (`/home` needs `usrquota`), PostgreSQL.
 2. **Multi-node clusters:** PostgreSQL and `node_id` exist, but the node agent and scheduler are not written.
-3. **Account transfer** from cPanel (`cpmove` import) and other panels. Off-site backup targets (S3/SFTP). Monthly bandwidth accounting from web logs (so bandwidth limits and warning emails do not work yet).
-4. Virus scanning (ClamAV), ModSecurity/WAF, Leech Protection, IP address manager, EasyApache-style module management, mailing-list archives and subscription pages (lists are distribution lists only), sub-users (cPanel User Manager), notification emails other than disk and bandwidth.
+3. **Account transfer** from cPanel (`cpmove` import) and other panels. Off-site backup targets (S3/SFTP). Suspending accounts automatically at the bandwidth limit (it is counted and warned about, not enforced).
+4. Virus scanning (ClamAV), ModSecurity/WAF, IP address manager, EasyApache-style module management, mailing-list archives and subscription pages (lists are distribution lists only), per-domain greylisting, BoxTrapper-style challenge mail, calendars and contacts, Web Disk (WebDAV), GPG keys, AWStats-style reports, per-account outbound mail limits.
 5. Translations and an OpenAPI document.
 6. An independent security review before production use.
 

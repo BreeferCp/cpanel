@@ -18,6 +18,7 @@ import (
 	"github.com/breefercp/breefercp/internal/ids"
 	"github.com/breefercp/breefercp/internal/provision"
 	"github.com/breefercp/breefercp/internal/rbac"
+	"github.com/breefercp/breefercp/internal/store"
 )
 
 func (s *Server) extraRoutes(mux *http.ServeMux) {
@@ -188,10 +189,11 @@ type redirectRow struct {
 	Source string `json:"source"`
 	Target string `json:"target"`
 	Code   int    `json:"code"`
+	Wild   bool   `json:"wildcard"`
 }
 
 func (s *Server) redirectsOf(ctx context.Context, domainID string) ([]provision.Redirect, error) {
-	rows, err := s.db.Query(ctx, `SELECT source, target, code FROM redirects WHERE domain_id = ? ORDER BY source`, domainID)
+	rows, err := s.db.Query(ctx, `SELECT source, target, code, wildcard FROM redirects WHERE domain_id = ? ORDER BY source`, domainID)
 	if err != nil {
 		return nil, err
 	}
@@ -199,9 +201,11 @@ func (s *Server) redirectsOf(ctx context.Context, domainID string) ([]provision.
 	var out []provision.Redirect
 	for rows.Next() {
 		var r provision.Redirect
-		if err := rows.Scan(&r.Source, &r.Target, &r.Code); err != nil {
+		var wild int
+		if err := rows.Scan(&r.Source, &r.Target, &r.Code, &wild); err != nil {
 			return nil, err
 		}
+		r.Wildcard = wild == 1
 		out = append(out, r)
 	}
 	return out, rows.Err()
@@ -216,7 +220,7 @@ func (s *Server) listRedirects(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	rows, err := s.db.Query(r.Context(), `SELECT id, source, target, code FROM redirects WHERE domain_id = ? ORDER BY source`, d.ID)
+	rows, err := s.db.Query(r.Context(), `SELECT id, source, target, code, wildcard FROM redirects WHERE domain_id = ? ORDER BY source`, d.ID)
 	if err != nil {
 		return err
 	}
@@ -224,9 +228,11 @@ func (s *Server) listRedirects(w http.ResponseWriter, r *http.Request) error {
 	out := []redirectRow{}
 	for rows.Next() {
 		var v redirectRow
-		if err := rows.Scan(&v.ID, &v.Source, &v.Target, &v.Code); err != nil {
+		var wild int
+		if err := rows.Scan(&v.ID, &v.Source, &v.Target, &v.Code, &wild); err != nil {
 			return err
 		}
+		v.Wild = wild == 1
 		out = append(out, v)
 	}
 	writeJSON(w, 200, out)
@@ -260,12 +266,18 @@ func (s *Server) addRedirect(w http.ResponseWriter, r *http.Request) error {
 	if req.Code == 0 {
 		req.Code = 301
 	}
-	if err := provision.ValidateRedirect(provision.Redirect{Source: req.Source, Target: req.Target, Code: req.Code}); err != nil {
+	if err := provision.ValidateRedirect(provision.Redirect{Source: req.Source, Target: req.Target, Code: req.Code, Wildcard: req.Wild}); err != nil {
 		return err
 	}
+	if req.Wild && s.cfg.WebServer == "openlitespeed" {
+		return errBadRequest("wildcard redirects are not supported with OpenLiteSpeed yet")
+	}
 	req.ID = ids.New()
-	if _, err := s.db.Exec(r.Context(), `INSERT INTO redirects (id, domain_id, source, target, code, created_at) VALUES (?,?,?,?,?,?)`,
-		req.ID, d.ID, req.Source, req.Target, req.Code, time.Now().Unix()); err != nil {
+	if _, err := s.db.Exec(r.Context(), `INSERT INTO redirects (id, domain_id, source, target, code, wildcard, created_at) VALUES (?,?,?,?,?,?,?)`,
+		req.ID, d.ID, req.Source, req.Target, req.Code, b2i(req.Wild), time.Now().Unix()); err != nil {
+		if store.IsUnique(err) {
+			return errConflict("that path already has a redirect")
+		}
 		return err
 	}
 	if err := s.applyDomain(r.Context(), a, d); err != nil {

@@ -111,6 +111,7 @@ export const tools: Tool[] = [
   { group: "Email", to: "spam", label: "Spam Filters", icon: ShieldQuestion, feature: "spam_filter", keywords: "rspamd junk blacklist whitelist", blurb: "Score incoming mail and move or delete spam." },
   { group: "Email", to: "address-importer", label: "Address Importer", icon: FolderUp, feature: "email", keywords: "csv bulk import mailboxes forwarders", blurb: "Create many email accounts or forwarders at once from a CSV list." },
   { group: "Email", to: "email-disk-usage", label: "Email Disk Usage", icon: HardDrive, feature: "email", keywords: "mailbox size space messages", blurb: "See which mailboxes take up the most space." },
+  { group: "Preferences", to: "user-manager", label: "User Manager", icon: UsersRound, feature: "email", keywords: "sub-user colleague team ftp email login leech", blurb: "Give a person email and FTP under one name and password." },
   { group: "Email", to: "webmail", label: "Webmail", icon: MailPlus, feature: "email", keywords: "roundcube read mail", blurb: "Read and send mail in your browser." },
 
   { group: "Files", to: "files", label: "File Manager", icon: FolderOpen, feature: "file_manager", keywords: "upload edit zip", blurb: "Upload, edit and organise the files of your sites." },

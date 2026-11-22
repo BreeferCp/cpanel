@@ -219,7 +219,7 @@ func (s *Server) deleteFirewall(w http.ResponseWriter, r *http.Request) error {
 var allowedSettings = map[string]bool{
 	"server_ip": true, "hostname": true, "nameserver1": true, "nameserver2": true,
 	"nameserver1_ip": true, "nameserver2_ip": true, "tools_url": true,
-	"contact_email": true, "company_name": true, "acme_email": true,
+	"contact_email": true, "company_name": true, "acme_email": true, "domain_verification": true,
 }
 
 func (s *Server) setting(ctx context.Context, key string) string {
@@ -267,6 +267,10 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 		case "hostname", "nameserver1", "nameserver2":
 			if err := system.Domain(v); err != nil {
 				return errBadRequest(k + " must be a fully qualified host name")
+			}
+		case "domain_verification":
+			if v != "on" && v != "off" {
+				return errBadRequest("domain_verification must be on or off")
 			}
 		case "tools_url":
 			if u, err := url.Parse(v); err != nil || u.Scheme != "https" || u.Host == "" {

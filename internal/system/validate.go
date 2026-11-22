@@ -25,6 +25,8 @@ var reservedUsers = map[string]bool{
 	"root": true, "daemon": true, "bin": true, "sys": true, "mysql": true, "postgres": true,
 	"nginx": true, "www": true, "mail": true, "postfix": true, "dovecot": true, "admin": true,
 	"nobody": true, "breefer": true, "pdns": true, "named": true, "ftp": true, "sshd": true,
+	// prefixes of the database users the panel creates for itself
+	"bfimp": true, "pma": true,
 }
 
 // ErrInvalid marks validation failures; the message is safe to show users.

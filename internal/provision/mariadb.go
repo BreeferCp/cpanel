@@ -86,7 +86,10 @@ func (m *MariaDB) DropDatabase(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	return m.exec(ctx, "DROP DATABASE IF EXISTS "+id)
+	if err := m.exec(ctx, "DROP DATABASE IF EXISTS "+id); err != nil {
+		return err
+	}
+	return m.exec(ctx, "DROP USER IF EXISTS ?@'localhost'", importUser(name))
 }
 
 // CreateUser creates a localhost-only user. The password is sent as a bound

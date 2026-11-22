@@ -855,7 +855,7 @@ type contactPrefs struct {
 }
 
 // notifyKeys are the events a user can be emailed about, with defaults.
-var notifyKeys = map[string]bool{"disk_quota": true, "bandwidth": true}
+var notifyKeys = map[string]bool{"disk_quota": true, "bandwidth": true, "ssl_expiry": true, "password_changed": true, "contact_changed": true}
 
 func (s *Server) contactOf(ctx context.Context, userID string) contactPrefs {
 	c := contactPrefs{Notify: map[string]bool{}}
@@ -901,6 +901,7 @@ func (s *Server) putContact(w http.ResponseWriter, r *http.Request) error {
 	for k := range notifyKeys {
 		clean.Notify[k] = req.Notify[k]
 	}
+	before := s.contactOf(r.Context(), uid)
 	raw, _ := json.Marshal(clean)
 	if _, err := s.db.Exec(r.Context(), `UPDATE users SET email = ? WHERE id = ?`, req.Email, uid); err != nil {
 		return err
@@ -910,6 +911,11 @@ func (s *Server) putContact(w http.ResponseWriter, r *http.Request) error {
 	}
 	if _, err := s.db.Exec(r.Context(), `INSERT INTO user_prefs (user_id, key, value) VALUES (?, 'contact', ?)`, uid, string(raw)); err != nil {
 		return err
+	}
+	// Judged by the old preferences, or whoever changed the address could mute the warning.
+	if before.Notify["contact_changed"] && (before.Email != req.Email || before.Secondary != req.Secondary) {
+		s.sendNotice(r.Context(), []string{before.Email, before.Secondary}, "The contact address of your hosting account changed",
+			"The contact address of your hosting account was just changed.\n\nIf this was not you, contact your hosting provider now.")
 	}
 	s.audit(r, "profile.contact", "", true, "")
 	w.WriteHeader(http.StatusNoContent)

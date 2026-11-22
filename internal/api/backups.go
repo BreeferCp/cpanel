@@ -94,7 +94,7 @@ func (s *Server) runBackup(a acct, id, kind, file string) {
 
 func (s *Server) buildBackup(ctx context.Context, a acct, kind, file string) error {
 	run := s.prov.Runner()
-	stage := filepath.Join(s.cfg.DataDir, "staging", a.SysUser)
+	stage := filepath.Join(s.cfg.DataDir, "staging", a.SysUser+"-"+ids.New())
 	if _, err := run.Run(ctx, "rm", "-rf", "--", stage); err != nil {
 		return err
 	}
@@ -125,7 +125,9 @@ func (s *Server) buildBackup(ctx context.Context, a acct, kind, file string) err
 	}
 	args := []string{"-czf", file, "-C", stage, "."}
 	if kind == "full" || kind == "files" {
-		args = []string{"-czf", file, "--exclude=./backups", "--exclude=./tmp", "-C", a.HomeDir, ".", "-C", stage, "."}
+		// The dumps go first: restore takes the first member of a name, so a
+		// look-alike file in the home cannot replace a dump.
+		args = []string{"-czf", file, "--anchored", "--exclude=./backups", "--exclude=./tmp", "-C", stage, ".", "-C", a.HomeDir, "."}
 	}
 	_, err := run.Run(ctx, "tar", args...)
 	if err == nil {
@@ -146,11 +148,41 @@ func (s *Server) restoreBackup(w http.ResponseWriter, r *http.Request) error {
 	if status != "complete" {
 		return errConflict("backup is not complete")
 	}
-	// Extract as the account user so a hostile archive cannot write outside
-	// what the account itself could modify.
-	if err := s.prov.Runner().RunWithFileInput(r.Context(), file, "runuser", "-u", a.SysUser, "--", "tar", "-xzf", "-", "-C", a.HomeDir,
-		"--no-same-owner", "--no-overwrite-dir", "--exclude=*.sql"); err != nil {
+	part := r.URL.Query().Get("part")
+	if part == "" {
+		part = "files"
+	}
+	if part != "files" && part != "databases" && part != "all" {
+		return errBadRequest("part must be files, databases or all")
+	}
+	var kind string
+	if err := s.db.QueryRow(r.Context(), `SELECT kind FROM backups WHERE id = ?`, r.PathValue("id")).Scan(&kind); err != nil {
 		return err
+	}
+	if (part != "databases" && kind == "databases") || (part != "files" && kind == "files") {
+		return errBadRequest("this backup does not contain that part")
+	}
+	names, err := s.databaseNames(r.Context(), a.ID)
+	if err != nil {
+		return err
+	}
+	// A disconnect must not leave a restore half done.
+	ctx := context.WithoutCancel(r.Context())
+	if part != "databases" {
+		// Extract as the account user so a hostile archive cannot write outside
+		// what the account itself could modify.
+		args := []string{"-u", a.SysUser, "--", "tar", "-xzf", "-", "-C", a.HomeDir, "--no-same-owner", "--no-overwrite-dir", "--anchored"}
+		for _, n := range names {
+			args = append(args, "--exclude=./"+n+".sql") // the panel's dumps are not the customer's files
+		}
+		if err := s.prov.Runner().RunWithFileInput(ctx, file, "runuser", args...); err != nil {
+			return err
+		}
+	}
+	if part != "files" {
+		if _, err := s.restoreDatabases(ctx, a, file, names); err != nil {
+			return err
+		}
 	}
 	s.audit(r, "backup.restore", a.SysUser, true, r.PathValue("id"))
 	w.WriteHeader(http.StatusNoContent)

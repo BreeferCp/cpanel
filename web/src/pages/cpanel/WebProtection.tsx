@@ -12,6 +12,30 @@ import { Modal } from "@/components/ui/Modal";
 
 // ---- Directory Privacy ----------------------------------------------------------
 
+function LeechProtection({ dir }: { dir: ProtectedDir }) {
+  const aid = useAccountId();
+  const key = `/accounts/${aid}/protected-dirs`;
+  const [limit, setLimit] = useState(String(dir.leech_limit || ""));
+  const save = useMutate(() => api.put(`${key}/${dir.id}/leech`, { limit: Number(limit || 0) }), { invalidate: [key], success: "Leech Protection saved" });
+  return (
+    <form
+      className="mt-4 flex flex-wrap items-end gap-2 border-t border-line pt-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        save.mutate();
+      }}
+    >
+      <Field label="Leech Protection" hint="Block a login used from more than this many addresses in 2 hours. Empty is off." className="min-w-0 max-w-sm flex-1">
+        {(id) => <Input id={id} type="number" min={0} max={1000} value={limit} onChange={(e) => setLimit(e.target.value)} />}
+      </Field>
+      <Button type="submit" size="sm" loading={save.isPending} disabled={Number(limit || 0) === (dir.leech_limit || 0)}>
+        Save limit
+      </Button>
+      {!!dir.blocked_users?.length && <p className="w-full text-[12.5px] text-warn">Blocked for sharing: {dir.blocked_users.join(", ")}. Set a new password to unblock.</p>}
+    </form>
+  );
+}
+
 export function DirectoryPrivacy() {
   const aid = useAccountId();
   const key = `/accounts/${aid}/protected-dirs`;
@@ -83,6 +107,7 @@ export function DirectoryPrivacy() {
               ) : (
                 <p className="text-[13px] text-warn">No users yet: nobody can open this directory until you add one.</p>
               )}
+              <LeechProtection dir={d} />
             </Card>
           ))}
         </div>
