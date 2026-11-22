@@ -164,7 +164,7 @@ func (m *MariaDB) SyncRemoteUser(ctx context.Context, name string, hosts, dbs []
 			}
 		}
 		for _, d := range dbs {
-			id, err := quoteIdent(d)
+			id, err := grantTarget(d)
 			if err != nil {
 				return err
 			}

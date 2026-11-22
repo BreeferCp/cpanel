@@ -169,7 +169,7 @@ ROTATE
 
 log "Configuring Postfix, Dovecot and OpenDKIM"
 install -d -m 0750 -o root -g postfix /etc/postfix/breefercp
-for f in domains mailboxes aliases lists domain_forwards; do install -m 0640 -o root -g postfix "$SRC/deploy/postfix/$f.cf" "/etc/postfix/breefercp/$f.cf"; done
+for f in domains mailboxes aliases lists domain_forwards senders; do install -m 0640 -o root -g postfix "$SRC/deploy/postfix/$f.cf" "/etc/postfix/breefercp/$f.cf"; done
 if ! grep -q 'BreeferCP' /etc/postfix/main.cf; then
   { echo; echo "# --- BreeferCP ---"; cat "$SRC/deploy/postfix/main.cf.snippet"; } >> /etc/postfix/main.cf
 fi
@@ -179,6 +179,20 @@ postconf -e "myhostname = ${HOSTNAME_FQDN}"
 postconf -e "virtual_mailbox_domains = proxy:sqlite:/etc/postfix/breefercp/domains.cf"
 postconf -e "virtual_mailbox_maps = proxy:sqlite:/etc/postfix/breefercp/mailboxes.cf"
 postconf -e "virtual_alias_maps = proxy:sqlite:/etc/postfix/breefercp/aliases.cf, proxy:sqlite:/etc/postfix/breefercp/lists.cf, proxy:sqlite:/etc/postfix/breefercp/domain_forwards.cf"
+postconf -e "smtpd_sender_login_maps = proxy:sqlite:/etc/postfix/breefercp/senders.cf"
+postconf -e "smtpd_sender_restrictions = reject_authenticated_sender_login_mismatch"
+# Submission for webmail and mail apps: TLS and a login are required, and a
+# mailbox can only send as itself or as a forwarder that points to it.
+postconf -M "submission/inet=submission inet n - y - - smtpd"
+postconf -M "submissions/inet=submissions inet n - y - - smtpd"
+for svc in submission submissions; do
+  postconf -P "${svc}/inet/syslog_name=postfix/${svc}" "${svc}/inet/smtpd_sasl_auth_enable=yes" \
+    "${svc}/inet/smtpd_recipient_restrictions=permit_sasl_authenticated,reject" \
+    "${svc}/inet/smtpd_relay_restrictions=permit_sasl_authenticated,reject" \
+    "${svc}/inet/smtpd_sender_restrictions=reject_sender_login_mismatch"
+done
+postconf -P "submission/inet/smtpd_tls_security_level=encrypt"
+postconf -P "submissions/inet/smtpd_tls_wrappermode=yes"
 # proxymap drops supplementary groups, so it needs its own read-only access.
 setfacl -m u:postfix:--x,d:u:postfix:r-- /var/lib/breefercp
 install -m 0644 "$SRC/deploy/dovecot/breefercp.conf" /etc/dovecot/conf.d/99-breefercp.conf

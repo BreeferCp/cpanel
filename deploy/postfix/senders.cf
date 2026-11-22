@@ -1,0 +1,4 @@
+dbpath = /var/lib/breefercp/breefercp.db
+# Who may send as an address when signed in: the mailbox itself, or a mailbox
+# that a forwarder of the same account delivers that address to.
+query = SELECT address FROM mailboxes WHERE address = '%u@%d' AND active = 1 UNION SELECT m.address FROM mail_aliases x JOIN mailboxes m ON m.account_id = x.account_id AND m.address = x.destination WHERE x.source = '%u@%d' AND m.active = 1

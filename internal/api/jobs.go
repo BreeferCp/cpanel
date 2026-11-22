@@ -19,6 +19,7 @@ func (s *Server) RunJobs(ctx context.Context) {
 	time.AfterFunc(30*time.Second, func() { s.collectUsage(ctx) })
 	go s.collectMetrics(ctx)
 	go s.upgradeVhosts(ctx)
+	go s.upgradeGrants(ctx)
 	for {
 		select {
 		case <-ctx.Done():
@@ -91,6 +92,40 @@ func (s *Server) upgradeVhosts(ctx context.Context) {
 		if err := s.putSetting(ctx, "vhost_layout", vhostLayout); err != nil {
 			s.log.Error("vhost upgrade", "err", err)
 		}
+	}
+}
+
+// upgradeGrants narrows database grants made before names were escaped.
+func (s *Server) upgradeGrants(ctx context.Context) {
+	if s.cfg.DryRun || s.setting(ctx, "grant_layout") == "2" {
+		return
+	}
+	rows, err := s.db.Query(ctx, `SELECT name FROM db_instances`)
+	if err != nil {
+		s.log.Error("grant upgrade", "err", err)
+		return
+	}
+	var names []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			rows.Close()
+			s.log.Error("grant upgrade", "err", err)
+			return
+		}
+		names = append(names, n)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		s.log.Error("grant upgrade", "err", err)
+		return
+	}
+	if err := s.mariadb.EscapeExistingGrants(ctx, names); err != nil {
+		s.log.Error("grant upgrade: database grants are still too wide", "err", err)
+		return
+	}
+	if err := s.putSetting(ctx, "grant_layout", "2"); err != nil {
+		s.log.Error("grant upgrade", "err", err)
 	}
 }
 

@@ -58,6 +58,11 @@ Every path is resolved with Go's `os.Root`, which refuses `..` and symlink escap
 - **WHM server tools:** changing the root password requires the caller's panel password again; SSH settings are validated with `sshd -t` and rolled back on error, and a change, or a key deletion, is refused when it would leave neither root nor a sudo user a way to log in; root keys with options (`command=`) are refused; server-wide domain and PHP views apply reseller tenancy.
 - **Track Delivery** only returns log lines whose sender or recipient is one of the caller's domains.
 
+## Tenant isolation
+
+- **Database grants** escape `_`, which MariaDB reads as a wildcard in `GRANT`; grants from older versions are narrowed on the first start.
+- **Mail submission** (587, 465) needs TLS and a login, and a mailbox may only send as itself or as a forwarder that delivers to it. Suspended accounts cannot sign in. Mail injected locally (PHP `mail()`, `sendmail`) is not sender-checked.
+
 ## Transport and headers
 
 TLS 1.2+ on the panel and all generated vhosts. The API sends `Content-Security-Policy` (`script-src 'self'`, no inline scripts), `X-Frame-Options: DENY`, `nosniff`, a strict referrer policy and HSTS over TLS.

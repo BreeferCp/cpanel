@@ -35,6 +35,42 @@ func quoteIdent(s string) (string, error) {
 	return "`" + s + "`", nil
 }
 
+// escapePattern makes a database name literal where MariaDB expects a pattern.
+// In GRANT and REVOKE "_" matches any character, so `abc_corp_wp` would also
+// cover another customer's `abcecorp_wp`.
+func escapePattern(name string) string {
+	return strings.ReplaceAll(name, "_", `\_`)
+}
+
+// grantTarget is quoteIdent for GRANT and REVOKE, where the name is a pattern.
+func grantTarget(name string) (string, error) {
+	if err := system.DBName(name); err != nil {
+		return "", err
+	}
+	return "`" + escapePattern(name) + "`", nil
+}
+
+// EscapeExistingGrants narrows grants written by versions that did not escape.
+// The rows are edited in place so that custom privilege lists are preserved.
+func (m *MariaDB) EscapeExistingGrants(ctx context.Context, names []string) error {
+	for _, name := range names {
+		if err := system.DBName(name); err != nil {
+			return err
+		}
+		if !strings.Contains(name, "_") {
+			continue
+		}
+		// IGNORE leaves rows that already have an escaped twin; those go next.
+		if err := m.exec(ctx, "UPDATE IGNORE mysql.db SET Db = ? WHERE Db = ?", escapePattern(name), name); err != nil {
+			return err
+		}
+		if err := m.exec(ctx, "DELETE FROM mysql.db WHERE Db = ?", name); err != nil {
+			return err
+		}
+	}
+	return m.exec(ctx, "FLUSH PRIVILEGES")
+}
+
 // CreateDatabase creates a utf8mb4 database.
 func (m *MariaDB) CreateDatabase(ctx context.Context, name string) error {
 	id, err := quoteIdent(name)
@@ -88,7 +124,7 @@ var allowedPrivs = map[string]bool{
 
 // Grant gives user the listed privileges (or ALL) on one database.
 func (m *MariaDB) Grant(ctx context.Context, db, user string, privs []string) error {
-	dbID, err := quoteIdent(db)
+	dbID, err := grantTarget(db)
 	if err != nil {
 		return err
 	}
@@ -115,7 +151,7 @@ func (m *MariaDB) Grant(ctx context.Context, db, user string, privs []string) er
 
 // Revoke removes all privileges of user on one database.
 func (m *MariaDB) Revoke(ctx context.Context, db, user string) error {
-	dbID, err := quoteIdent(db)
+	dbID, err := grantTarget(db)
 	if err != nil {
 		return err
 	}
